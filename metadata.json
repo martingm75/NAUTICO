@@ -1,0 +1,5 @@
+{
+  "name": "Gestión de Marina Pro",
+  "description": "Una aplicación avanzada para la gestión de amarres en puertos deportivos, con mapa interactivo de 83 plazas, estadísticas en tiempo real e inteligencia artificial para optimización de espacios.",
+  "requestFramePermissions": []
+}
