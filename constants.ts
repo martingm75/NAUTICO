@@ -5,9 +5,9 @@ const generateMoorings = (): Mooring[] => {
   const moorings: Mooring[] = [];
   
   const config = [
-    { zone: 'NORTE' as PierZone, prefix: 'P1', total: 25, sideCount: 24, headId: 'P1/25C' },
-    { zone: 'CENTRAL' as PierZone, prefix: 'P2', total: 26, sideCount: 25, headId: 'P2/26C' },
-    { zone: 'SUR' as PierZone, prefix: 'P3', total: 32, sideCount: 31, headId: 'P3/35G' }
+    { zone: 'NORTE' as PierZone, prefix: 'P1', sideCount: 24, headId: 'P1/25C' },
+    { zone: 'CENTRAL' as PierZone, prefix: 'P2', sideCount: 25, headId: 'P2/26C' },
+    { zone: 'SUR' as PierZone, prefix: 'P3', sideCount: 34, headId: 'P3/35G' }
   ];
 
   let globalId = 1;
@@ -17,18 +17,19 @@ const generateMoorings = (): Mooring[] => {
     for (let i = 1; i <= pier.sideCount; i++) {
       let letter = 'C';
       if (pier.prefix === 'P3' && i <= 15) letter = 'A';
+      else if (pier.prefix === 'P1' && i === 24) letter = 'D'; // P1/24D
       else if (i % 4 === 0) letter = 'D';
       else if (i % 2 === 0) letter = 'B';
 
       addMooring(`${pier.prefix}/${i}${letter}`, i, pier.zone, letter);
     }
 
-    // Añadir plaza de cabecera específica
+    // Añadir plaza de cabecera
     const headLetter = pier.headId.slice(-1);
-    addMooring(pier.headId, 99, pier.zone, headLetter, true);
+    addMooring(pier.headId, 99, pier.zone, headLetter);
   });
 
-  function addMooring(id: string, num: number, zone: PierZone, letter: string, isHead = false) {
+  function addMooring(id: string, num: number, zone: PierZone, letter: string) {
     const statusRoll = Math.random();
     let status = MooringStatus.AVAILABLE;
     if (statusRoll > 0.6) status = MooringStatus.OCCUPIED;
@@ -79,6 +80,8 @@ export const STATUS_COLORS = {
 };
 
 export const BASE_BOAT_COLOR = 'bg-slate-900';
+export const MAP_BASE_BOAT_COLOR = '#1e293b'; 
+export const MAP_TRANSIT_BOAT_COLOR = '#ef4444'; // Cambiado a ROJO según solicitud
 
 export const STATUS_LABELS = {
   [MooringStatus.AVAILABLE]: 'Disponible',
