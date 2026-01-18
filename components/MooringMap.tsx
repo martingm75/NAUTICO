@@ -267,12 +267,18 @@ const MooringMap: React.FC<MooringMapProps> = ({
   // --- Renderizado ---
 
   const BoatIcon = ({ width, height, isBase = false }: { width: number, height: number, isBase?: boolean }) => {
+    // La geometría se dibuja verticalmente (proa en Y=0, popa en Y=height)
+    // Width corresponde a la Manga visual, Height a la Eslora visual.
     const boatColor = isBase ? MAP_BASE_BOAT_COLOR : MAP_TRANSIT_BOAT_COLOR;
     return (
       <g>
+        {/* Sombra */}
         <path d={`M ${width*0.5} ${height} L ${width*0.05} ${height*0.75} Q ${width*0.05} ${height*0.2}, ${width*0.5} 0 Q ${width*0.95} ${height*0.2}, ${width*0.95} ${height*0.75} Z`} fill="black" fillOpacity="0.2" transform="translate(10, 10)"/>
+        {/* Casco Borde */}
         <path d={`M ${width*0.5} ${height} L 0 ${height*0.75} Q 0 ${height*0.12}, ${width*0.5} 0 Q ${width} ${height*0.12}, ${width} ${height*0.75} Z`} fill="#ffffff" stroke="#94a3b8" strokeWidth="2" />
+        {/* Casco Color */}
         <path d={`M ${width*0.5} ${height*0.96} L ${width*0.1} ${height*0.72} Q ${width*0.1} ${height*0.2}, ${width*0.5} ${height*0.1} Q ${width*0.9} ${height*0.2}, ${width*0.9} ${height*0.72} Z`} fill={boatColor} />
+        {/* Cabina/Detalle */}
         <path d={`M ${width*0.25} ${height*0.65} L ${width*0.75} ${height*0.65} L ${width*0.8} ${height*0.45} Q ${width*0.5} ${height*0.35}, ${width*0.2} ${height*0.45} Z`} fill="white" fillOpacity="0.8" />
         <rect x={width*0.35} y={height*0.7} width={width*0.3} height={height*0.18} rx={width*0.03} fill="white" fillOpacity="0.3" />
       </g>
@@ -291,7 +297,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
         let drawTop = fingerState;
         let drawBottom = false;
 
-        // Sobrescritura manual si existe
+        // Sobrescritura manual
         if (m.customFinger === 'TOP') {
           drawTop = true;
           drawBottom = false;
@@ -305,12 +311,10 @@ const MooringMap: React.FC<MooringMapProps> = ({
           drawTop = false;
           drawBottom = false;
         } else {
-          // Lógica automática para Singles
           if (m.isSingle) {
              drawTop = true; 
              fingerState = true; 
           } else {
-            // Lógica normal alternada
             if (fingerState) {
                fingerState = false;
             } else {
@@ -329,8 +333,6 @@ const MooringMap: React.FC<MooringMapProps> = ({
     const leftSide = prepareSide(leftRaw);
     const rightSide = prepareSide(rightRaw);
 
-    // Calcular altura por slot INDEPENDIENTE para cada lado
-    // Esto asegura que ambos lados ocupen toda la altura vertical (fixedHeight)
     const leftSlotHeight = leftSide.length > 0 ? fixedHeight / leftSide.length : 0;
     const rightSlotHeight = rightSide.length > 0 ? fixedHeight / rightSide.length : 0;
 
@@ -339,8 +341,8 @@ const MooringMap: React.FC<MooringMapProps> = ({
       const slotHeight = isRight ? rightSlotHeight : leftSlotHeight;
       
       const y = PIER_Y_OFFSET + slotStartY + (i * slotHeight);
-      const w = m.id.includes('A') ? 280 : m.id.includes('B') ? 350 : m.id.includes('D') ? 500 : 400;
-      const h = slotHeight - 10; 
+      const w = m.id.includes('A') ? 280 : m.id.includes('B') ? 350 : m.id.includes('D') ? 500 : 400; // Ancho visual (Largo del amarre)
+      const h = slotHeight - 10; // Alto visual (Ancho del amarre)
       const isSelected = selectedId === m.id;
       
       const xWater = isRight ? walkwayWidth : -w;
@@ -357,13 +359,24 @@ const MooringMap: React.FC<MooringMapProps> = ({
       const pillStroke = m.boat ? "#1e293b" : "#cbd5e1";
       const textFill = "fill-slate-900";
 
+      // Color de fondo de la plaza
       const slotFill = isSelected 
         ? "rgba(255, 255, 255, 0.4)" 
         : (m.status === MooringStatus.RESERVED 
-          ? "#fffbeb" 
+          ? "rgba(251, 191, 36, 0.6)" // Amarillo más visible para Reservas
           : "rgba(255, 255, 255, 0.15)"); 
 
       const slotStroke = isSelected ? "white" : "rgba(255,255,255,0.3)";
+
+      // Dimensiones visuales del barco para el icono (Verticales por defecto)
+      // El icono se dibuja vertical: Width=Manga, Height=Eslora
+      const boatBeam = h * 0.8;
+      const boatLength = w * 0.85;
+
+      // Rotación para orientar proa a pasarela
+      // Lado derecho (isRight=true): Pasarela a la Izq. Proa debe mirar Izq (-90 deg).
+      // Lado izquierdo (isRight=false): Pasarela a la Der. Proa debe mirar Der (90 deg).
+      const rotation = isRight ? -90 : 90;
 
       return (
         <g key={m.id}>
@@ -391,11 +404,14 @@ const MooringMap: React.FC<MooringMapProps> = ({
 
           <g onClick={(e) => { e.stopPropagation(); onSelectMooring(m); }} className="cursor-pointer">
             <rect x={xWater} y={y} width={w} height={h} fill={slotFill} stroke={slotStroke} strokeWidth={isSelected ? "15" : "3"} rx="10" />
+            
             {m.boat && (
-              <g transform={isRight ? `translate(${centerX - (w*0.8)/2}, ${centerY - (h*0.85)/2})` : `translate(${centerX + (w*0.8)/2}, ${centerY - (h*0.85)/2}) scale(-1, 1)`} style={{ pointerEvents: 'none' }}>
-                <BoatIcon width={w * 0.8} height={h * 0.85} isBase={m.boat.isBase} />
+              // Transformación: Mover al centro del slot, rotar, y centrar el icono (que dibuja desde 0,0)
+              <g transform={`translate(${centerX}, ${centerY}) rotate(${rotation}) translate(${-boatBeam/2}, ${-boatLength/2})`} style={{ pointerEvents: 'none' }}>
+                <BoatIcon width={boatBeam} height={boatLength} isBase={m.boat.isBase} />
               </g>
             )}
+
             <g transform={`translate(${centerX}, ${centerY}) rotate(180)`} style={{ pointerEvents: 'none' }}>
               <rect x="-110" y="-50" width="220" height="100" rx="25" fill={pillFill} stroke={pillStroke} strokeWidth="6" />
               <text textAnchor="middle" y="25" className={`text-[65px] font-black tracking-tighter ${textFill}`}>{m.id}</text>
@@ -407,6 +423,12 @@ const MooringMap: React.FC<MooringMapProps> = ({
 
     const piersEndAt = PIER_Y_OFFSET + slotStartY + fixedHeight;
     const hammerConcreteWidth = 900; 
+
+    // Dimensiones y rotación para Cabeceras (Hammerhead)
+    // El barco se dibuja horizontalmente (paralelo al muelle de cabecera).
+    // Usamos la misma lógica: Icono vertical rotado 90 grados.
+    const headBoatLength = hammerConcreteWidth - 100;
+    const headBoatBeam = 240;
 
     return (
       <g key={zone} transform={`translate(${xOffset}, 0)`}>
@@ -437,15 +459,16 @@ const MooringMap: React.FC<MooringMapProps> = ({
                 y={hammerHeight + 20} 
                 width={hammerConcreteWidth} 
                 height={280} 
-                fill={selectedId === headMooring.id ? "rgba(255,255,255,0.4)" : "rgba(255,255,255,0.15)"} 
+                fill={selectedId === headMooring.id ? "rgba(255,255,255,0.4)" : (headMooring.status === MooringStatus.RESERVED ? "rgba(251, 191, 36, 0.6)" : "rgba(255,255,255,0.15)")} 
                 stroke={selectedId === headMooring.id ? "white" : "rgba(255,255,255,0.3)"} 
                 strokeWidth={10} 
                 rx="40" 
               />
               
               {headMooring.boat && (
-                <g transform={`translate(${-hammerConcreteWidth/2 + 50}, ${hammerHeight + 40})`} style={{ pointerEvents: 'none' }}>
-                  <BoatIcon width={hammerConcreteWidth - 100} height={240} isBase={headMooring.boat.isBase} />
+                // Centrado en el slot de cabecera (y=hammerHeight+20, height=280 -> center Y = hammerHeight+20 + 140)
+                <g transform={`translate(0, ${hammerHeight + 20 + 140}) rotate(90) translate(${-headBoatBeam/2}, ${-headBoatLength/2})`} style={{ pointerEvents: 'none' }}>
+                   <BoatIcon width={headBoatBeam} height={headBoatLength} isBase={headMooring.boat.isBase} />
                 </g>
               )}
               
@@ -479,7 +502,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
           top: 0,
           left: 0,
           transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-          transition: 'none', // Eliminada la transición para evitar parpadeos durante manipulaciones
+          transition: 'none', 
           transformOrigin: '0 0',
         }}
       >
@@ -538,7 +561,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
                 <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#1e293b]"></div><span className="text-[10px] font-bold text-slate-700 uppercase">SOCIO</span></div>
                 <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#ef4444]"></div><span className="text-[10px] font-bold text-slate-700 uppercase">TRÁNSITO</span></div>
                 <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-white bg-white/20"></div><span className="text-[10px] font-bold text-slate-700 uppercase">LIBRE</span></div>
-                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-white bg-[#fffbeb]"></div><span className="text-[10px] font-bold text-slate-700 uppercase">RESERVA</span></div>
+                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-white bg-[#fcd34d]/60"></div><span className="text-[10px] font-bold text-slate-700 uppercase">RESERVA</span></div>
               </div>
             </div>
           ) : (
