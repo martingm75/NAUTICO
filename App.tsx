@@ -1,24 +1,79 @@
 
-import React, { useState, useMemo } from 'react';
-import { Mooring, MooringStatus, Boat } from './types';
-import { INITIAL_MOORINGS, STATUS_COLORS } from './constants';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Mooring, MooringStatus, Boat, TariffSeason } from './types';
+import { INITIAL_MOORINGS, STATUS_COLORS, INITIAL_TARIFFS } from './constants';
 import MooringMap from './components/MooringMap';
 import MooringEditor from './components/MooringEditor';
 import StatsPanel from './components/StatsPanel';
 import Calculator from './components/Calculator';
+import TariffManager from './components/TariffManager';
+import RegistryManager from './components/RegistryManager';
 import { getMooringAdvice } from './services/geminiService';
-import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon } from 'lucide-react';
+import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [moorings, setMoorings] = useState<Mooring[]>(INITIAL_MOORINGS);
-  const [selectedMooring, setSelectedMooring] = useState<Mooring | null>(moorings[0]);
-  const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator'>('map');
+  // --- ESTADO DE AMARRES CON PERSISTENCIA ---
+  const [moorings, setMoorings] = useState<Mooring[]>(() => {
+    try {
+      const savedMoorings = localStorage.getItem('marina_moorings_data');
+      return savedMoorings ? JSON.parse(savedMoorings) : INITIAL_MOORINGS;
+    } catch (error) {
+      console.error("Error cargando amarres:", error);
+      return INITIAL_MOORINGS;
+    }
+  });
+
+  // --- ESTADO DE TARIFAS CON PERSISTENCIA ---
+  const [tariffs, setTariffs] = useState<TariffSeason[]>(() => {
+    try {
+      const savedTariffs = localStorage.getItem('marina_tariffs_data');
+      return savedTariffs ? JSON.parse(savedTariffs) : INITIAL_TARIFFS;
+    } catch (error) {
+      console.error("Error cargando tarifas:", error);
+      return INITIAL_TARIFFS;
+    }
+  });
+
+  // --- ESTADO DEL REGISTRO DE BARCOS CON PERSISTENCIA ---
+  const [boatRegistry, setBoatRegistry] = useState<Boat[]>(() => {
+    try {
+      const savedRegistry = localStorage.getItem('marina_boat_registry');
+      return savedRegistry ? JSON.parse(savedRegistry) : [];
+    } catch (error) {
+      console.error("Error cargando registro:", error);
+      return [];
+    }
+  });
+
+  const [selectedMooring, setSelectedMooring] = useState<Mooring | null>(null);
+  const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator' | 'tariffs' | 'registry'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   const [aiMessage, setAiMessage] = useState<string>('¡Hola! Soy tu asistente de puerto. ¿En qué puedo ayudarte hoy?');
   const [aiInput, setAiInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [transitingBoat, setTransitingBoat] = useState<{ boat: Boat; sourceId: string; targetId: string } | null>(null);
+
+  // Seleccionar el primer amarre al cargar si no hay selección (opcional)
+  useEffect(() => {
+    if (!selectedMooring && moorings.length > 0 && activeTab === 'map') {
+      // setSelectedMooring(moorings[0]); 
+    }
+  }, []);
+
+  // --- EFECTOS DE GUARDADO AUTOMÁTICO ---
+  useEffect(() => {
+    localStorage.setItem('marina_moorings_data', JSON.stringify(moorings));
+  }, [moorings]);
+
+  useEffect(() => {
+    localStorage.setItem('marina_tariffs_data', JSON.stringify(tariffs));
+  }, [tariffs]);
+
+  useEffect(() => {
+    localStorage.setItem('marina_boat_registry', JSON.stringify(boatRegistry));
+  }, [boatRegistry]);
+
 
   const filteredMoorings = useMemo(() => {
     return moorings.filter(m => 
@@ -27,6 +82,13 @@ const App: React.FC = () => {
       m.boat?.owner.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [moorings, searchQuery]);
+
+  // Calcular IDs de barcos activos para pasar al RegistryManager
+  const activeBoatIds = useMemo(() => {
+    return moorings
+      .filter(m => (m.status === MooringStatus.OCCUPIED || m.status === MooringStatus.RESERVED) && m.boat)
+      .map(m => m.boat!.id);
+  }, [moorings]);
 
   const handleUpdateMooring = (updated: Mooring) => {
     setMoorings(prev => prev.map(m => m.id === updated.id ? updated : m));
@@ -62,6 +124,36 @@ const App: React.FC = () => {
     if (newMooring) setSelectedMooring({ ...newMooring, boat, status: MooringStatus.OCCUPIED });
   };
 
+  // Función para asignar barco desde el registro a un amarre
+  const handleAssignRegistryBoat = (boat: Boat, mooringId: string) => {
+    // Clonamos el barco para ponerle fecha actual de llegada
+    const boatToDock = {
+      ...boat,
+      arrivalDate: new Date().toISOString().split('T')[0],
+      departureDate: '' // Reseteamos salida
+    };
+
+    setMoorings(prev => prev.map(m => {
+      if (m.id === mooringId) {
+        return {
+          ...m,
+          status: MooringStatus.OCCUPIED,
+          boat: boatToDock
+        };
+      }
+      return m;
+    }));
+
+    // Cambiar a vista de mapa para ver el resultado
+    setActiveTab('map');
+    
+    // Seleccionar el amarre actualizado
+    setTimeout(() => {
+      const targetM = { ...moorings.find(m => m.id === mooringId)!, status: MooringStatus.OCCUPIED, boat: boatToDock };
+      setSelectedMooring(targetM);
+    }, 100);
+  };
+
   const handleAiAsk = async () => {
     if (!aiInput.trim()) return;
     setIsAiLoading(true);
@@ -89,8 +181,10 @@ const App: React.FC = () => {
         <nav className="space-y-1 flex-1">
           {[
             { id: 'map', label: 'Mapa', icon: LayoutGrid },
+            { id: 'registry', label: 'Registro', icon: Database },
             { id: 'list', label: 'Listado', icon: Search },
             { id: 'stats', label: 'Analítica', icon: BarChart3 },
+            { id: 'tariffs', label: 'Tarifas', icon: Euro },
             { id: 'calculator', label: 'Calculadora', icon: CalcIcon },
             { id: 'ai', label: 'IA Advisor', icon: Bot },
           ].map((item) => (
@@ -113,10 +207,16 @@ const App: React.FC = () => {
           <div className="flex items-center gap-4">
             <button className="lg:hidden p-2 hover:bg-slate-100 rounded-lg" onClick={() => setSidebarOpen(true)}><Menu size={20}/></button>
             <div className="flex items-baseline gap-2">
+              <Anchor className="text-amber-400 self-center mr-1" size={20} />
               <h2 className="text-lg font-black text-slate-800 uppercase tracking-tighter">CN Camariñas</h2>
               <span className="text-slate-300">|</span>
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                {activeTab === 'map' ? 'Mapa Interactivo' : activeTab === 'list' ? 'Gestión' : activeTab === 'stats' ? 'Estado' : activeTab === 'calculator' ? 'Cálculos Rápidos' : 'IA Advisor'}
+                {activeTab === 'map' ? 'Mapa Interactivo' : 
+                 activeTab === 'registry' ? 'Base de Datos' :
+                 activeTab === 'list' ? 'Gestión' : 
+                 activeTab === 'stats' ? 'Estado' : 
+                 activeTab === 'tariffs' ? 'Tarifas 2022' : 
+                 activeTab === 'calculator' ? 'Cálculos Rápidos' : 'IA Advisor'}
               </span>
             </div>
           </div>
@@ -131,6 +231,14 @@ const App: React.FC = () => {
                 selectedId={selectedMooring?.id || null} 
                 transitingBoat={transitingBoat}
                 onAnimationComplete={handleAnimationComplete}
+              />
+            ) : activeTab === 'registry' ? (
+              <RegistryManager 
+                registry={boatRegistry} 
+                moorings={moorings}
+                activeBoatIds={activeBoatIds}
+                onUpdateRegistry={setBoatRegistry} 
+                onAssignToMooring={handleAssignRegistryBoat}
               />
             ) : activeTab === 'list' ? (
                <div className="p-4 overflow-auto h-full">
@@ -150,6 +258,7 @@ const App: React.FC = () => {
                </div>
              ) : activeTab === 'stats' ? <div className="p-6 overflow-auto"><StatsPanel moorings={moorings}/></div> : 
              activeTab === 'calculator' ? <div className="p-6 flex items-center justify-center h-full bg-slate-50"><Calculator /></div> :
+             activeTab === 'tariffs' ? <div className="h-full"><TariffManager tariffs={tariffs} onUpdate={setTariffs} /></div> :
              <div className="p-6 flex flex-col h-full max-w-2xl mx-auto w-full">
                <div className="flex-1 bg-slate-50 border rounded-2xl p-6 mb-4 overflow-auto space-y-4">
                  <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
@@ -164,40 +273,42 @@ const App: React.FC = () => {
             }
           </div>
 
-          <div className="w-full lg:w-80 shrink-0 space-y-4 flex flex-col lg:h-full">
-            <div className="flex-1 overflow-y-visible lg:overflow-y-auto min-h-0">
-              {selectedMooring ? (
-                <MooringEditor 
-                  mooring={selectedMooring} 
-                  allMoorings={moorings}
-                  onUpdate={handleUpdateMooring} 
-                  onMoveBoat={handleMoveBoat}
-                  onClose={() => setSelectedMooring(null)}
-                />
-              ) : (
-               <div className="bg-white rounded-2xl border p-8 text-center text-slate-400 border-dashed border-2 flex flex-col items-center justify-center h-48 lg:h-full">
-                 <Anchor size={32} className="opacity-20 mb-2"/>
-                 <p className="text-xs font-bold uppercase tracking-widest">Selecciona un amarre</p>
-               </div>
-              )}
-            </div>
-            
-            <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl shrink-0 relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-4 opacity-5"><RefreshCw size={80} className="rotate-12" /></div>
-              <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 flex items-center gap-2">Resumen de Estado</h3>
-              <div className="space-y-3 relative z-10">
-                {Object.entries(MooringStatus).map(([key, val]) => (
-                  <div key={val} className="flex justify-between items-center text-xs font-bold">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[val as MooringStatus]}`}></div>
-                      <span className="text-slate-300 uppercase">{val}</span>
+          {activeTab !== 'tariffs' && activeTab !== 'registry' && (
+            <div className="w-full lg:w-80 shrink-0 space-y-4 flex flex-col lg:h-full">
+              <div className="flex-1 overflow-y-visible lg:overflow-y-auto min-h-0">
+                {selectedMooring ? (
+                  <MooringEditor 
+                    mooring={selectedMooring} 
+                    allMoorings={moorings}
+                    onUpdate={handleUpdateMooring} 
+                    onMoveBoat={handleMoveBoat}
+                    onClose={() => setSelectedMooring(null)}
+                  />
+                ) : (
+                <div className="bg-white rounded-2xl border p-8 text-center text-slate-400 border-dashed border-2 flex flex-col items-center justify-center h-48 lg:h-full">
+                  <Anchor size={32} className="opacity-20 mb-2"/>
+                  <p className="text-xs font-bold uppercase tracking-widest">Selecciona un amarre</p>
+                </div>
+                )}
+              </div>
+              
+              <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl shrink-0 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4 opacity-5"><RefreshCw size={80} className="rotate-12" /></div>
+                <h3 className="text-xs font-bold uppercase text-slate-400 mb-4 flex items-center gap-2">Resumen de Estado</h3>
+                <div className="space-y-3 relative z-10">
+                  {Object.entries(MooringStatus).map(([key, val]) => (
+                    <div key={val} className="flex justify-between items-center text-xs font-bold">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[val as MooringStatus]}`}></div>
+                        <span className="text-slate-300 uppercase">{val}</span>
+                      </div>
+                      <span className="bg-white/10 px-2 py-0.5 rounded text-[10px] font-black">{moorings.filter(m => m.status === val).length}</span>
                     </div>
-                    <span className="bg-white/10 px-2 py-0.5 rounded text-[10px] font-black">{moorings.filter(m => m.status === val).length}</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </main>
     </div>

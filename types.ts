@@ -25,6 +25,8 @@ export interface Mooring {
   number: number;
   zone: PierZone;
   status: MooringStatus;
+  isSingle?: boolean; // Propiedad para plazas que van solas entre fingers
+  customFinger?: 'TOP' | 'BOTTOM' | 'BOTH' | 'NONE'; // Control manual del finger (Babor/Estribor)
   boat?: Boat;
   maxDimensions: {
     length: number;
@@ -38,4 +40,19 @@ export interface MarinaStats {
   reserved: number;
   available: number;
   maintenance: number;
+}
+
+export interface TariffRow {
+  id: string;
+  range: string; // e.g. "De 5 a 5,99 mts."
+  daily: number;
+  weekly: number;
+  monthly: number;
+}
+
+export interface TariffSeason {
+  id: 'low' | 'high';
+  name: string;
+  dates: string;
+  rows: TariffRow[];
 }
