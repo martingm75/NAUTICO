@@ -18,7 +18,7 @@ export const getMooringAdvice = async (moorings: Mooring[], query: string) => {
     model: 'gemini-3-flash-preview',
     contents: `Como gestor inteligente de un puerto deportivo con 83 plazas, analiza el siguiente estado de amarres: ${JSON.stringify(context)}. 
     El usuario pregunta: "${query}". 
-    Responde de forma concisa y profesional en español.`,
+    Responde de forma concisa y profesional en español. Las dimensiones de las plazas son informativas, pueden entrar barcos mayores si es razonable.`,
     config: {
       temperature: 0.7,
     }
@@ -29,16 +29,22 @@ export const getMooringAdvice = async (moorings: Mooring[], query: string) => {
 };
 
 export const suggestAssignment = async (moorings: Mooring[], boatData: { length: number; beam: number }) => {
-  const available = moorings.filter(m => m.status === 'AVAILABLE' && 
-    m.maxDimensions.length >= boatData.length && 
-    m.maxDimensions.beam >= boatData.beam);
+  // Las dimensiones son informativas, así que pasamos todos los disponibles a la IA
+  // pero le damos la información de dimensiones para que ella juzgue.
+  const available = moorings.filter(m => m.status === 'AVAILABLE');
 
-  if (available.length === 0) return "No hay amarres disponibles que cumplan las dimensiones.";
+  if (available.length === 0) return "No hay amarres disponibles actualmente.";
+
+  const contextList = available.map(a => ({
+    id: a.id,
+    refDims: `${a.maxDimensions.length}x${a.maxDimensions.beam}`
+  }));
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Tengo un barco de ${boatData.length}m de eslora y ${boatData.beam}m de manga. 
-    Los siguientes amarres están libres y caben: ${JSON.stringify(available.map(a => a.id))}. 
+    Los siguientes amarres están libres (con sus dimensiones de referencia): ${JSON.stringify(contextList)}. 
+    Ten en cuenta que las dimensiones de referencia son informativas y pueden superarse ligeramente si es necesario.
     ¿Cuál me recomiendas y por qué?`,
     config: {
       temperature: 0.5,

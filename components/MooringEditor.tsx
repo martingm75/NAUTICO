@@ -113,7 +113,7 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
           <div className="flex items-center gap-3 text-xs font-bold bg-black/20 w-fit px-2 py-1 rounded">
              <span>PANTALÁN {editedMooring.zone}</span>
              <span className="w-1 h-1 bg-white/40 rounded-full"></span>
-             <span>MÁX: {editedMooring.maxDimensions.length}x{editedMooring.maxDimensions.beam}m</span>
+             <span>MÁX: {editedMooring.maxDimensions.length}x{editedMooring.maxDimensions.beam}m (Ref)</span>
           </div>
         </div>
         <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full transition-all"><X size={24} /></button>
@@ -254,11 +254,13 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
               <div className="col-span-2 grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-2xl border border-slate-100">
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Ruler size={12} /> Eslora (m)</label>
-                  <input name="length" type="number" value={editedMooring.boat?.length || 0} onChange={handleBoatChange} className={`w-full px-3 py-2 border rounded-lg text-sm font-bold outline-none ${!fitsLength ? 'border-rose-300 text-rose-600 bg-rose-50' : 'border-slate-200 text-slate-700'}`} />
+                  <input name="length" type="number" value={editedMooring.boat?.length || 0} onChange={handleBoatChange} className={`w-full px-3 py-2 border rounded-lg text-sm font-bold outline-none ${!fitsLength ? 'border-amber-300 text-amber-700 bg-amber-50' : 'border-slate-200 text-slate-700'}`} />
+                  {!fitsLength && <span className="text-[9px] text-amber-600 font-bold block mt-1">* Supera dimensión ref.</span>}
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1 mb-1"><Ruler size={12} /> Manga (m)</label>
-                  <input name="beam" type="number" value={editedMooring.boat?.beam || 0} onChange={handleBoatChange} className={`w-full px-3 py-2 border rounded-lg text-sm font-bold outline-none ${!fitsBeam ? 'border-rose-300 text-rose-600 bg-rose-50' : 'border-slate-200 text-slate-700'}`} />
+                  <input name="beam" type="number" value={editedMooring.boat?.beam || 0} onChange={handleBoatChange} className={`w-full px-3 py-2 border rounded-lg text-sm font-bold outline-none ${!fitsBeam ? 'border-amber-300 text-amber-700 bg-amber-50' : 'border-slate-200 text-slate-700'}`} />
+                   {!fitsBeam && <span className="text-[9px] text-amber-600 font-bold block mt-1">* Supera dimensión ref.</span>}
                 </div>
               </div>
             </div>

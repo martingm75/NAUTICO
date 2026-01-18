@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Boat, Mooring, MooringStatus } from '../types';
-import { Search, Plus, User, Ruler, Ship, MapPin, Save, X, Trash2, Anchor, ArrowRight, History, Compass, CheckCircle2, Container, Waves, Map } from 'lucide-react';
+import { Search, Plus, User, Ruler, Ship, MapPin, Save, X, Trash2, Anchor, ArrowRight, History, Compass, CheckCircle2, Container, Waves, Map, AlertTriangle } from 'lucide-react';
 import PrintableMap from './PrintableMap';
 
 interface RegistryManagerProps {
@@ -92,13 +92,25 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
   }, [registry, activeBoatIds]);
 
   // Filtrado de amarres disponibles para asignación
+  // NOTA: Las medidas son informativas, así que mostramos todos los disponibles,
+  // pero podemos ordenarlos o indicar si encajan.
   const availableMooringsForAssignment = useMemo(() => {
     if (!assigningBoat) return [];
-    return moorings.filter(m => 
-      m.status === MooringStatus.AVAILABLE &&
-      m.maxDimensions.length >= assigningBoat.length &&
-      m.maxDimensions.beam >= assigningBoat.beam
-    );
+    
+    // Obtenemos todos los disponibles
+    const allAvailable = moorings.filter(m => m.status === MooringStatus.AVAILABLE);
+
+    // Ordenar: Primero los que encajan perfectamente en dimensiones, luego el resto
+    return allAvailable.sort((a, b) => {
+      const aFits = a.maxDimensions.length >= assigningBoat.length && a.maxDimensions.beam >= assigningBoat.beam;
+      const bFits = b.maxDimensions.length >= assigningBoat.length && b.maxDimensions.beam >= assigningBoat.beam;
+      if (aFits && !bFits) return -1;
+      if (!aFits && bFits) return 1;
+      
+      // Si ambos encajan o ambos no, ordenar por ID
+      return a.id.localeCompare(b.id);
+    });
+
   }, [assigningBoat, moorings]);
 
   const handleOpenModal = (boat?: Boat) => {
@@ -382,7 +394,7 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
               <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                  <div>
                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ubicar "{assigningBoat.name}"</h3>
-                   <p className="text-xs text-slate-500 font-medium">Dimensiones requeridas: {assigningBoat.length}m x {assigningBoat.beam}m</p>
+                   <p className="text-xs text-slate-500 font-medium">Dimensiones del barco: {assigningBoat.length}m x {assigningBoat.beam}m</p>
                  </div>
                  <button onClick={() => setAssigningBoat(null)} className="hover:bg-slate-100 p-2 rounded-full transition-colors"><X size={20}/></button>
               </div>
@@ -391,7 +403,6 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                  {availableMooringsForAssignment.length === 0 ? (
                    <div className="p-10 text-center">
                      <p className="text-slate-400 font-bold mb-2">No hay plazas disponibles</p>
-                     <p className="text-xs text-slate-500">No existen amarres libres con las dimensiones suficientes para este barco.</p>
                    </div>
                  ) : (
                    <table className="w-full text-left border-collapse">
@@ -399,26 +410,35 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                        <tr>
                          <th className="p-4 text-xs font-black text-slate-400 uppercase">Amarre</th>
                          <th className="p-4 text-xs font-black text-slate-400 uppercase">Zona</th>
-                         <th className="p-4 text-xs font-black text-slate-400 uppercase">Max Dim.</th>
+                         <th className="p-4 text-xs font-black text-slate-400 uppercase">Ref. Dim.</th>
                          <th className="p-4 text-xs font-black text-slate-400 uppercase text-right">Acción</th>
                        </tr>
                      </thead>
                      <tbody className="divide-y divide-slate-200">
-                       {availableMooringsForAssignment.map(m => (
-                         <tr key={m.id} className="bg-white hover:bg-sky-50 transition-colors group">
-                           <td className="p-4 font-black text-slate-800">{m.id}</td>
-                           <td className="p-4 text-xs font-bold text-slate-500">{m.zone}</td>
-                           <td className="p-4 text-xs font-mono text-slate-600">{m.maxDimensions.length}x{m.maxDimensions.beam}m</td>
-                           <td className="p-4 text-right">
-                             <button 
-                               onClick={() => confirmAssignment(m.id)}
-                               className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase group-hover:bg-sky-500 group-hover:text-white transition-all flex items-center gap-1 ml-auto"
-                             >
-                               Asignar <ArrowRight size={12}/>
-                             </button>
-                           </td>
-                         </tr>
-                       ))}
+                       {availableMooringsForAssignment.map(m => {
+                         const fits = m.maxDimensions.length >= assigningBoat.length && m.maxDimensions.beam >= assigningBoat.beam;
+                         
+                         return (
+                           <tr key={m.id} className="bg-white hover:bg-sky-50 transition-colors group">
+                             <td className="p-4 font-black text-slate-800 flex items-center gap-2">
+                               {m.id}
+                               {!fits && <AlertTriangle size={14} className="text-amber-500" title="Dimensiones de referencia excedidas" />}
+                             </td>
+                             <td className="p-4 text-xs font-bold text-slate-500">{m.zone}</td>
+                             <td className={`p-4 text-xs font-mono ${fits ? 'text-slate-600' : 'text-amber-600 font-bold'}`}>
+                               {m.maxDimensions.length}x{m.maxDimensions.beam}m
+                             </td>
+                             <td className="p-4 text-right">
+                               <button 
+                                 onClick={() => confirmAssignment(m.id)}
+                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-1 ml-auto ${fits ? 'bg-slate-100 text-slate-600 group-hover:bg-sky-500 group-hover:text-white' : 'bg-amber-50 text-amber-600 border border-amber-200 hover:bg-amber-100'}`}
+                               >
+                                 {fits ? 'Asignar' : 'Forzar'} <ArrowRight size={12}/>
+                               </button>
+                             </td>
+                           </tr>
+                         );
+                       })}
                      </tbody>
                    </table>
                  )}
