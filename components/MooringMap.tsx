@@ -207,7 +207,8 @@ const MooringMap: React.FC<MooringMapProps> = ({
   // --- Manejo de eventos del Mouse (Desktop) ---
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    // Delta reducido para zoom más suave (0.01 en vez de 0.05)
+    const delta = e.deltaY > 0 ? -0.01 : 0.01;
     setScale(prev => Math.min(Math.max(prev + delta, minScale), 5));
   };
 
