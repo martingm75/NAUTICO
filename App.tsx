@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Mooring, MooringStatus, Boat, TariffSeason } from './types';
-import { INITIAL_MOORINGS, STATUS_COLORS, INITIAL_TARIFFS } from './constants';
+import { INITIAL_MOORINGS, STATUS_COLORS, INITIAL_TARIFFS, STATUS_LABELS } from './constants';
 import MooringMap from './components/MooringMap';
 import MooringEditor from './components/MooringEditor';
 import StatsPanel from './components/StatsPanel';
@@ -9,7 +9,7 @@ import Calculator from './components/Calculator';
 import TariffManager from './components/TariffManager';
 import RegistryManager from './components/RegistryManager';
 import { getMooringAdvice } from './services/geminiService';
-import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database } from 'lucide-react';
+import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database, Container } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- ESTADO DE AMARRES CON PERSISTENCIA ---
@@ -46,7 +46,7 @@ const App: React.FC = () => {
   });
 
   const [selectedMooring, setSelectedMooring] = useState<Mooring | null>(null);
-  const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator' | 'tariffs' | 'registry'>('map');
+  const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator' | 'tariffs' | 'registry' | 'dry_dock'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   const [aiMessage, setAiMessage] = useState<string>('¡Hola! Soy tu asistente de puerto. ¿En qué puedo ayudarte hoy?');
   const [aiInput, setAiInput] = useState('');
@@ -91,7 +91,26 @@ const App: React.FC = () => {
   }, [moorings]);
 
   const handleUpdateMooring = (updated: Mooring) => {
+    // 1. Actualizar el estado visual de los amarres
     setMoorings(prev => prev.map(m => m.id === updated.id ? updated : m));
+    
+    // 2. GUARDAR INMEDIATAMENTE EN LA BASE DE DATOS (REGISTRO)
+    // Si el amarre actualizado tiene un barco, actualizamos o creamos su ficha en el registro global
+    if (updated.boat) {
+      setBoatRegistry(prev => {
+        const boatIndex = prev.findIndex(b => b.id === updated.boat!.id);
+        if (boatIndex >= 0) {
+          // Actualizar existente
+          const newRegistry = [...prev];
+          newRegistry[boatIndex] = { ...updated.boat! };
+          return newRegistry;
+        } else {
+          // Crear nuevo
+          return [...prev, { ...updated.boat! }];
+        }
+      });
+    }
+
     if (selectedMooring?.id === updated.id) {
       setSelectedMooring(updated);
     }
@@ -114,7 +133,58 @@ const App: React.FC = () => {
     setSelectedMooring(null);
   };
 
+  const handleDeparture = (mooringId: string, boatData?: Boat) => {
+    // Buscar el amarre actual en el estado (la fuente de la verdad)
+    const mooring = moorings.find(m => m.id === mooringId);
+    
+    // Usamos el barco que nos pasan (del editor) o el del estado si no se pasa nada
+    const boatToDepart = boatData || mooring?.boat;
+
+    // Validación de seguridad
+    if (!mooring || !boatToDepart) {
+      console.error("Intento de zarpar desde un amarre vacío o sin datos de barco");
+      return;
+    }
+
+    // 1. Configurar animación de salida
+    setTransitingBoat({
+      boat: boatToDepart,
+      sourceId: mooringId,
+      targetId: 'EXIT'
+    });
+
+    // 2. Liberar el amarre
+    setMoorings(prev => prev.map(m => 
+      m.id === mooringId ? { ...m, boat: undefined, status: MooringStatus.AVAILABLE } : m
+    ));
+
+    // 3. Actualizar registro: Establecer fecha de salida
+    const today = new Date().toISOString().split('T')[0];
+    
+    setBoatRegistry(prev => {
+      const exists = prev.some(b => b.id === boatToDepart.id);
+      if (exists) {
+        return prev.map(b => b.id === boatToDepart.id ? { ...b, departureDate: today, inDryDock: false } : b);
+      } else {
+        // Fallback de seguridad: Si no estaba en registro, lo añadimos ahora saliendo
+        return [...prev, { ...boatToDepart, departureDate: today, inDryDock: false }];
+      }
+    });
+
+    // Cambiar a vista de mapa para ver la animación
+    setActiveTab('map');
+
+    // Cerrar editor
+    setSelectedMooring(null);
+  };
+
   const handleAnimationComplete = (targetId: string, boat: Boat) => {
+    // Si el objetivo es SALIDA, simplemente limpiamos la animación, el barco ya se borró del amarre y se actualizó en registro.
+    if (targetId === 'EXIT') {
+      setTransitingBoat(null);
+      return;
+    }
+
     setMoorings(prev => prev.map(m => 
       m.id === targetId ? { ...m, boat: boat, status: MooringStatus.OCCUPIED } : m
     ));
@@ -126,12 +196,16 @@ const App: React.FC = () => {
 
   // Función para asignar barco desde el registro a un amarre
   const handleAssignRegistryBoat = (boat: Boat, mooringId: string) => {
-    // Clonamos el barco para ponerle fecha actual de llegada
+    // Si estaba en marina seca, lo sacamos
     const boatToDock = {
       ...boat,
+      inDryDock: false,
       arrivalDate: new Date().toISOString().split('T')[0],
-      departureDate: '' // Reseteamos salida
+      departureDate: '' 
     };
+
+    // Actualizamos el registro también para reflejar el cambio de estado (si era dry dock)
+    setBoatRegistry(prev => prev.map(b => b.id === boat.id ? boatToDock : b));
 
     setMoorings(prev => prev.map(m => {
       if (m.id === mooringId) {
@@ -182,6 +256,7 @@ const App: React.FC = () => {
           {[
             { id: 'map', label: 'Mapa', icon: LayoutGrid },
             { id: 'registry', label: 'Registro', icon: Database },
+            { id: 'dry_dock', label: 'Marina Seca', icon: Container },
             { id: 'list', label: 'Listado', icon: Search },
             { id: 'stats', label: 'Analítica', icon: BarChart3 },
             { id: 'tariffs', label: 'Tarifas', icon: Euro },
@@ -213,6 +288,7 @@ const App: React.FC = () => {
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                 {activeTab === 'map' ? 'Mapa Interactivo' : 
                  activeTab === 'registry' ? 'Base de Datos' :
+                 activeTab === 'dry_dock' ? 'Marina Seca' :
                  activeTab === 'list' ? 'Gestión' : 
                  activeTab === 'stats' ? 'Estado' : 
                  activeTab === 'tariffs' ? 'Tarifas 2022' : 
@@ -232,13 +308,14 @@ const App: React.FC = () => {
                 transitingBoat={transitingBoat}
                 onAnimationComplete={handleAnimationComplete}
               />
-            ) : activeTab === 'registry' ? (
+            ) : (activeTab === 'registry' || activeTab === 'dry_dock') ? (
               <RegistryManager 
                 registry={boatRegistry} 
                 moorings={moorings}
                 activeBoatIds={activeBoatIds}
                 onUpdateRegistry={setBoatRegistry} 
                 onAssignToMooring={handleAssignRegistryBoat}
+                initialTab={activeTab === 'dry_dock' ? 'dry_dock' : undefined}
               />
             ) : activeTab === 'list' ? (
                <div className="p-4 overflow-auto h-full">
@@ -248,7 +325,7 @@ const App: React.FC = () => {
                      {filteredMoorings.map(m => (
                        <tr key={m.id} className="hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-50 last:border-0" onClick={() => setSelectedMooring(m)}>
                          <td className="py-4 font-bold text-slate-900">{m.id}</td>
-                         <td><span className={`px-2 py-0.5 rounded text-[10px] text-white font-bold ${STATUS_COLORS[m.status]}`}>{m.status}</span></td>
+                         <td><span className={`px-2 py-0.5 rounded text-[10px] text-white font-bold ${STATUS_COLORS[m.status]}`}>{STATUS_LABELS[m.status]}</span></td>
                          <td className="text-sm font-medium">{m.boat?.name || '-'}</td>
                          <td className="text-right text-xs text-slate-500">{m.maxDimensions.length}x{m.maxDimensions.beam}m</td>
                        </tr>
@@ -273,7 +350,7 @@ const App: React.FC = () => {
             }
           </div>
 
-          {activeTab !== 'tariffs' && activeTab !== 'registry' && (
+          {activeTab !== 'tariffs' && activeTab !== 'registry' && activeTab !== 'dry_dock' && (
             <div className="w-full lg:w-80 shrink-0 space-y-4 flex flex-col lg:h-full">
               <div className="flex-1 overflow-y-visible lg:overflow-y-auto min-h-0">
                 {selectedMooring ? (
@@ -282,6 +359,7 @@ const App: React.FC = () => {
                     allMoorings={moorings}
                     onUpdate={handleUpdateMooring} 
                     onMoveBoat={handleMoveBoat}
+                    onDepart={handleDeparture}
                     onClose={() => setSelectedMooring(null)}
                   />
                 ) : (
@@ -300,7 +378,7 @@ const App: React.FC = () => {
                     <div key={val} className="flex justify-between items-center text-xs font-bold">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${STATUS_COLORS[val as MooringStatus]}`}></div>
-                        <span className="text-slate-300 uppercase">{val}</span>
+                        <span className="text-slate-300 uppercase">{STATUS_LABELS[val as MooringStatus]}</span>
                       </div>
                       <span className="bg-white/10 px-2 py-0.5 rounded text-[10px] font-black">{moorings.filter(m => m.status === val).length}</span>
                     </div>

@@ -117,7 +117,16 @@ const MooringMap: React.FC<MooringMapProps> = ({
     }
     
     const getCoords = (mooringId: string) => {
+      // Coordenada especial de SALIDA
+      // Debido a la rotación de 180 grados del grupo principal:
+      // El origen visual (0,0) es la esquina inferior derecha del SVG.
+      // Top-Right de la pantalla corresponde a X=0 (aprox), Y=6000 (aprox) en el sistema de coordenadas local del grupo.
+      if (mooringId === 'EXIT') {
+        return { x: 100, y: 5800, w: 0, h: 0, isRight: true, isHead: false };
+      }
+
       const mooring = moorings.find(m => m.id === mooringId);
+      // Fallback seguro si el amarre ya no tiene barco o no se encuentra
       if (!mooring) return { x: 0, y: 0, w: 0, h: 0, isRight: false };
       
       const xOffset = PIER_OFFSETS[mooring.zone];
@@ -169,6 +178,20 @@ const MooringMap: React.FC<MooringMapProps> = ({
       { x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: end.y },
       { x: end.x, y: end.y }
     ];
+
+    // Simplificar ruta si es salida
+    if (transitingBoat.targetId === 'EXIT') {
+      waypoints.length = 0; // Limpiar y redefinir
+      waypoints.push({ x: start.x, y: start.y });
+      // Salir del amarre
+      waypoints.push({ x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: start.y });
+      // Ir al canal (y moverse hacia el canal visualmente arriba/derecha)
+      waypoints.push({ x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: PIER_Y_OFFSET + SNL_Y });
+      // Navegar por el canal hacia la derecha (local X -> 0)
+      waypoints.push({ x: 100, y: PIER_Y_OFFSET + SNL_Y });
+      // Subir a la salida (esquina superior derecha visual = local Y -> 6000)
+      waypoints.push({ x: 100, y: 5800 });
+    }
 
     let currentWaypoint = 0;
     let startTime = performance.now();

@@ -18,6 +18,7 @@ export interface Boat {
   departureDate: string;
   registration: string;
   isBase?: boolean; // New property to distinguish base boats
+  inDryDock?: boolean; // Propiedad para saber si está en Marina Seca
 }
 
 export interface Mooring {
@@ -31,6 +32,11 @@ export interface Mooring {
   maxDimensions: {
     length: number;
     beam: number;
+  };
+  reservation?: {
+    startDate: string;
+    endDate: string;
+    notes?: string;
   };
 }
 

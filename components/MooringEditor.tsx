@@ -2,17 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { Mooring, MooringStatus, Boat } from '../types';
 import { STATUS_LABELS, STATUS_COLORS, BASE_BOAT_COLOR } from '../constants';
-import { Anchor, User, Ruler, Calendar, Trash2, Save, X, CheckCircle2, AlertTriangle, MoveHorizontal, Search } from 'lucide-react';
+import { Anchor, User, Ruler, Calendar, Trash2, Save, X, CheckCircle2, AlertTriangle, MoveHorizontal, Search, Clock, Ship } from 'lucide-react';
 
 interface MooringEditorProps {
   mooring: Mooring;
   allMoorings: Mooring[];
   onUpdate: (mooring: Mooring) => void;
   onMoveBoat: (sourceId: string, targetId: string) => void;
+  onDepart: (mooringId: string, boatData: Boat) => void;
   onClose: () => void;
 }
 
-const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onUpdate, onMoveBoat, onClose }) => {
+const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onUpdate, onMoveBoat, onDepart, onClose }) => {
   const [editedMooring, setEditedMooring] = useState<Mooring>(mooring);
   const [targetId, setTargetId] = useState('');
   const [moveError, setMoveError] = useState('');
@@ -34,8 +35,40 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
     }));
   };
 
+  const handleReservationChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setEditedMooring(prev => ({
+      ...prev,
+      reservation: {
+        startDate: '',
+        endDate: '',
+        ...prev.reservation,
+        [name]: value
+      }
+    }));
+  };
+
   const handleStatusChange = (status: MooringStatus) => {
-    setEditedMooring(prev => ({ ...prev, status, boat: status === MooringStatus.AVAILABLE ? undefined : prev.boat }));
+    // Si pasamos a disponible, limpiamos barco y reserva. 
+    // Si pasamos a Ocupado/Reservado, INICIALIZAMOS un barco vacío si no existe, para que aparezcan los campos y el botón Zarpar.
+    const emptyBoat: Boat = { 
+      id: Date.now().toString(), 
+      name: '', 
+      owner: '', 
+      length: 0, 
+      beam: 0, 
+      arrivalDate: new Date().toISOString().split('T')[0], 
+      departureDate: '', 
+      registration: '', 
+      isBase: false 
+    };
+
+    setEditedMooring(prev => ({ 
+      ...prev, 
+      status, 
+      boat: status === MooringStatus.AVAILABLE ? undefined : (prev.boat || emptyBoat),
+      reservation: status === MooringStatus.RESERVED ? (prev.reservation || { startDate: '', endDate: '' }) : prev.reservation
+    }));
   };
 
   const handleMove = () => {
@@ -49,6 +82,15 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
       return;
     }
     onMoveBoat(mooring.id, target.id);
+  };
+
+  const handleDepartClick = () => {
+    // Si el barco existe en el editor (incluso si no está guardado en el estado global), permitimos zarpar.
+    if (!editedMooring.boat) return;
+    
+    if (confirm(`¿Confirmar la salida de "${editedMooring.boat.name || 'la embarcación'}"? Pasará al registro histórico.`)) {
+      onDepart(mooring.id, editedMooring.boat);
+    }
   };
 
   const fitsLength = (editedMooring.boat?.length || 0) <= editedMooring.maxDimensions.length;
@@ -77,7 +119,7 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
         <button onClick={onClose} className="hover:bg-white/20 p-2 rounded-full transition-all"><X size={24} /></button>
       </div>
 
-      <div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
+      <div className="p-6 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar relative">
         {/* Traslado de Barco (Nuevo módulo) */}
         {mooring.boat && (
           <section className="bg-sky-50 p-5 rounded-2xl border border-sky-100 space-y-4">
@@ -140,6 +182,49 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
           </div>
         </section>
 
+        {/* Sección de Reservas */}
+        {editedMooring.status === MooringStatus.RESERVED && (
+           <section className="bg-amber-50 p-5 rounded-2xl border border-amber-100 space-y-4">
+             <div className="flex items-center gap-2 border-b border-amber-100 pb-2">
+               <Calendar size={18} className="text-amber-600" />
+               <h3 className="font-black text-amber-900 uppercase text-xs tracking-widest">Fechas de Reserva</h3>
+             </div>
+             <p className="text-[10px] text-amber-700 leading-tight">La plaza puede ser ocupada temporalmente por otro barco hasta la fecha de inicio.</p>
+             <div className="grid grid-cols-2 gap-4">
+               <div>
+                 <label className="text-[10px] font-bold text-amber-700 uppercase">Inicio Reserva</label>
+                 <input 
+                   type="date" 
+                   name="startDate" 
+                   value={editedMooring.reservation?.startDate || ''} 
+                   onChange={handleReservationChange}
+                   className="w-full mt-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-amber-500 outline-none text-slate-700"
+                 />
+               </div>
+               <div>
+                 <label className="text-[10px] font-bold text-amber-700 uppercase">Fin Reserva</label>
+                 <input 
+                   type="date" 
+                   name="endDate" 
+                   value={editedMooring.reservation?.endDate || ''} 
+                   onChange={handleReservationChange}
+                   className="w-full mt-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-amber-500 outline-none text-slate-700"
+                 />
+               </div>
+               <div className="col-span-2">
+                  <label className="text-[10px] font-bold text-amber-700 uppercase">Notas</label>
+                  <input 
+                    name="notes"
+                    placeholder="Detalles del cliente o reserva..."
+                    value={editedMooring.reservation?.notes || ''}
+                    onChange={handleReservationChange}
+                    className="w-full mt-1 bg-white border border-amber-200 rounded-lg px-3 py-2 text-xs font-medium focus:ring-2 focus:ring-amber-500 outline-none text-slate-700"
+                  />
+               </div>
+             </div>
+           </section>
+        )}
+
         {(editedMooring.status === MooringStatus.OCCUPIED || editedMooring.status === MooringStatus.RESERVED) && (
           <div className="space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -180,11 +265,22 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
           </div>
         )}
 
-        <div className="flex gap-3 pt-4 sticky bottom-0 bg-white border-t border-slate-100">
+        <div className="flex gap-2 pt-4 sticky bottom-0 bg-white border-t border-slate-100 z-50 pb-2">
+          {(editedMooring.status === MooringStatus.OCCUPIED || editedMooring.status === MooringStatus.RESERVED) && editedMooring.boat && (
+            <button 
+              onClick={handleDepartClick} 
+              className="px-4 py-3 bg-indigo-500 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-200 active:scale-95"
+              title="El barco zarpa y libera la plaza"
+            >
+              <Ship size={18} /> ZARPAR
+            </button>
+          )}
+
           <button onClick={() => onUpdate(editedMooring)} className="flex-1 bg-slate-900 text-white py-3 px-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-black transition-all shadow-xl active:scale-95">
-            <Save size={18} /> ACTUALIZAR DATOS
+            <Save size={18} /> ACTUALIZAR
           </button>
-          <button onClick={() => { if(confirm("¿Estás seguro?")) handleStatusChange(MooringStatus.AVAILABLE); }} className="p-3 border-2 border-slate-100 text-slate-400 rounded-2xl hover:border-rose-100 hover:text-rose-500 transition-all active:scale-95" title="Liberar">
+          
+          <button onClick={() => { if(confirm("¿Estás seguro de liberar la plaza?")) handleStatusChange(MooringStatus.AVAILABLE); }} className="p-3 border-2 border-slate-100 text-slate-400 rounded-2xl hover:border-rose-100 hover:text-rose-500 transition-all active:scale-95" title="Liberar Forzosamente">
             <Trash2 size={20} />
           </button>
         </div>
