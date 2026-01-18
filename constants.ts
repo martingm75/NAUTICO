@@ -6,17 +6,25 @@ const generateMoorings = (): Mooring[] => {
   let globalId = 1;
 
   // Lista de plazas que van solas (Single) y sus letras específicas si difieren de la norma
+  // NOTA: Las letras definidas aquí pueden ser sobrescritas por la lógica de bucles posterior si se pasan explícitamente.
   const specialSingles: Record<string, string> = {
     'P1/1': 'C',
-    'P1/2': 'B',
+    'P1/2': 'B', 
     'P1/24': 'D',
     'P2/1': 'A',
     'P2/2': 'C',
     'P3/1': 'A',
-    'P3/2': 'A'
+    'P3/2': 'A' // P3/2 es A (6m)
   };
 
-  const createMooring = (prefix: string, i: number, zone: PierZone, defaultLetter: string) => {
+  const createMooring = (
+    prefix: string, 
+    i: number, 
+    zone: PierZone, 
+    defaultLetter: string, 
+    overrideLength?: number, 
+    overrideBeam?: number
+  ) => {
     const idBase = `${prefix}/${i}`;
     let letter = defaultLetter;
     let isSingle = false;
@@ -24,7 +32,6 @@ const generateMoorings = (): Mooring[] => {
 
     // Verificar si es una plaza especial con letra o single
     if (specialSingles[idBase]) {
-      letter = specialSingles[idBase];
       isSingle = true;
     }
 
@@ -42,20 +49,20 @@ const generateMoorings = (): Mooring[] => {
       customFinger = 'TOP';
     }
     
-    // P2/1A: No es solitaria, forma dúo con P2/3. Finger Top.
+    // P2/1: No es solitaria, forma dúo con P2/3. Finger Top.
     if (idBase === 'P2/1') {
       isSingle = false; 
       customFinger = 'TOP'; 
     }
     
-    // P2/3C: Forma dúo con P2/1A. Finger Bottom.
+    // P2/3: Forma dúo con P2/1. Finger Bottom.
     if (idBase === 'P2/3') {
       customFinger = 'BOTTOM';
     }
 
-    // P2/2: Finger solo arriba
+    // P2/2: Plaza C, no tiene finger por estribor (Top visual al inicio). Ponemos BOTTOM para compartir con P2/4.
     if (idBase === 'P2/2') {
-       customFinger = 'TOP';
+       customFinger = 'BOTTOM';
     }
 
     // P3/1: Unitaria, Finger abajo
@@ -64,9 +71,9 @@ const generateMoorings = (): Mooring[] => {
       customFinger = 'BOTTOM';
     }
 
-    // P3/2: Solo finger arriba (NO tiene finger debajo)
+    // P3/2: Plaza A, no tiene finger por estribor (Top visual). Ponemos BOTTOM.
     if (idBase === 'P3/2') {
-      customFinger = 'TOP';
+      customFinger = 'BOTTOM';
     }
     
     // P3 Lado Derecho (Impares): Configuración patrón específico para 8 fingers
@@ -82,28 +89,26 @@ const generateMoorings = (): Mooring[] => {
       }
     }
     
-    // P1/24D: Caso especial (Single al final)
+    // P1/24: Caso especial (Single al final)
     if (idBase === 'P1/24') {
        isSingle = true;
     }
 
     const fullId = `${idBase}${letter}`;
     
-    // Dimensiones según letra
-    // A=8m, B=10m, C=12m, D=15m, G=17m (Cabeceras)
+    // Dimensiones ESTÁNDAR por letra
+    // A: 6m, B: 8m, C: 10m, D: 12m, G: Cabecera
     let dims = {
-      'A': { l: 8, b: 3.1 },  
-      'B': { l: 10, b: 4.65 }, 
-      'C': { l: 12, b: 4.8 },  
-      'D': { l: 15, b: 5.2 },  
-      'G': { l: 17, b: 6.5 }   
-    }[letter] || { l: 10, b: 4 };
+      'A': { l: 6, b: 3.1 },  
+      'B': { l: 8, b: 3.75 }, 
+      'C': { l: 10, b: 4.85 },  
+      'D': { l: 12, b: 5.15 },  
+      'G': { l: 17, b: 6.5 }
+    }[letter] || { l: 10, b: 4.85 };
 
-    // --- OVERRIDES DE DIMENSIONES ESPECÍFICAS ---
-    
-    // P3/19B es de 8 metros (aunque tenga letra B)
-    if (idBase === 'P3/19') {
-      dims = { l: 8, b: 3.1 };
+    // Si se pasan dimensiones explícitas, tienen prioridad
+    if (overrideLength !== undefined && overrideBeam !== undefined) {
+      dims = { l: overrideLength, b: overrideBeam };
     }
 
     // Estado aleatorio
@@ -127,8 +132,8 @@ const generateMoorings = (): Mooring[] => {
         id: `B-${globalId}`,
         name: `Embarcación ${globalId}`,
         owner: `Socio ${globalId}`,
-        length: dims.l - 1.5,
-        beam: dims.b - 0.8,
+        length: Math.max(dims.l - 1.5, 4), 
+        beam: Math.max(dims.b - 0.5, 2),
         arrivalDate: '2024-01-15',
         departureDate: '2024-12-31',
         registration: `7ª-CO-${globalId}-${24}`,
@@ -139,53 +144,78 @@ const generateMoorings = (): Mooring[] => {
   };
 
   // --- PANTALÁN 1 (NORTE) ---
-  // Lado Izquierdo (Pares): 2...24
-  for (let i = 2; i <= 24; i += 2) {
-    let letter = 'D'; 
-    if (i < 24) letter = 'D'; 
-    if (i <= 22) letter = 'D'; 
-    createMooring('P1', i, 'NORTE', letter);
-  }
+  
   // Lado Derecho (Impares): 1...25
+  // "Todas las plazas de 10 metros de eslora x 4.85 de manga" -> Letra C
   for (let i = 1; i <= 25; i += 2) {
     createMooring('P1', i, 'NORTE', 'C');
   }
+
+  // Lado Izquierdo (Pares): 2...24
+  for (let i = 2; i <= 24; i += 2) {
+    if (i === 2 || i === 4) {
+      // "P1/2B y p1/4B son de 8 metros de eslora x 3.75 metros de manga" -> Letra B
+      createMooring('P1', i, 'NORTE', 'B');
+    } else if (i >= 6 && i <= 12) {
+      // "P1/6C a P1/12D (todas estas acaban en D)"
+      // REGLA SUPERIOR: "Las plazas de 10 metros de eslora acaban todas en C"
+      createMooring('P1', i, 'NORTE', 'C');
+    } else {
+      // "El resto son de 12 metros de eslora X 5.15 metros de manga" -> Letra D
+      createMooring('P1', i, 'NORTE', 'D');
+    }
+  }
+  
   // Cabecera P1
   createMooring('P1', 26, 'NORTE', 'G');
 
 
   // --- PANTALÁN 2 (CENTRAL) ---
-  // Lado Izquierdo (Pares): 2...24
-  for (let i = 2; i <= 24; i += 2) {
-    let letter = 'C';
-    if (i > 18) letter = 'C'; 
-    createMooring('P2', i, 'CENTRAL', letter);
-  }
+
   // Lado Derecho (Impares): 1...23
   for (let i = 1; i <= 23; i += 2) {
-    let letter = 'C';
-    if (i >= 13) letter = 'D'; 
-    createMooring('P2', i, 'CENTRAL', letter);
+    if (i === 1) {
+      // P2/1 pequeña/mediana. Usamos A (6m) o B (8m). Por defecto A.
+      createMooring('P2', i, 'CENTRAL', 'A'); 
+    } else {
+      // "Desde P2/3D son de 12 metros de eslora por 5.15 de manga y acaban en letra D" -> Letra D
+      createMooring('P2', i, 'CENTRAL', 'D');
+    }
   }
-  // Cabecera P2: P2/26C
-  createMooring('P2', 26, 'CENTRAL', 'C');
+
+  // Lado Izquierdo (Pares): 2...24
+  // "Las del lado izquierdo son todas de 10 metros de eslora x 4.85 de manga" -> Letra C
+  for (let i = 2; i <= 24; i += 2) {
+    createMooring('P2', i, 'CENTRAL', 'C');
+  }
+
+  // Cabecera P2: P2/26C (Si es 12m debería ser D, si es 10m C. Mantenemos C o G para cabecera)
+  createMooring('P2', 26, 'CENTRAL', 'G');
 
 
   // --- PANTALÁN 3 (SUR) ---
-  // Lado Izquierdo (Pares): 2...26
-  for (let i = 2; i <= 26; i += 2) {
-    let letter = 'C';
-    if (i <= 20) letter = 'A'; 
-    else if (i <= 28) letter = 'B';
-    createMooring('P3', i, 'SUR', letter);
-  }
+
   // Lado Derecho (Impares): 1...33
   for (let i = 1; i <= 33; i += 2) {
-    let letter = 'C';
-    if (i <= 17) letter = 'A'; 
-    else if (i <= 27) letter = 'B';
-    createMooring('P3', i, 'SUR', letter);
+    if (i <= 19) {
+      // "De P3/1A a P3/19A ... 10 plazas de 6 metros x 3.1" -> Letra A
+      createMooring('P3', i, 'SUR', 'A');
+    } else {
+      // "El resto... 8 metros ... acaban con letra B" -> Letra B
+      createMooring('P3', i, 'SUR', 'B');
+    }
   }
+
+  // Lado Izquierdo (Pares): 2...26
+  // "P3/2A es 6m, el resto son 10m (Letra C)"
+  for (let i = 2; i <= 26; i += 2) {
+    if (i === 2) {
+      createMooring('P3', i, 'SUR', 'A');
+    } else {
+      createMooring('P3', i, 'SUR', 'C');
+    }
+  }
+
   // Cabecera P3: P3/35G
   createMooring('P3', 35, 'SUR', 'G'); 
 
@@ -208,8 +238,7 @@ export const INITIAL_TARIFFS: TariffSeason[] = [
       { id: '6', range: 'De 9 a 9,99 mts.', daily: 12.00, weekly: 71.00, monthly: 288.00 },
       { id: '7', range: 'De 10 a 10,99 mts.', daily: 14.00, weekly: 84.00, monthly: 336.00 },
       { id: '8', range: 'De 11 a 11,99 mts.', daily: 18.00, weekly: 108.00, monthly: 432.00 },
-      { id: '9', range: 'De 12 a 12,99 mts.', daily: 19.00, weekly: 22.00, monthly: 456.00 }, // Nota: Semanal parece anómalo en OCR (22), pero mantengo fiel o corrijo si es obvio error. Asumiremos fiel al OCR salvo error tipográfico obvio. 19*6 != 22. Probablemente OCR dice 114? Dejo 22 si es lo que dice el doc, o corrijo. En la imagen parece 137 pero en la fila anterior. Dejemos datos según lógica visual si es posible. 
-      // Corrección manual basada en lógica: 19/dia. Semanal suele ser x6. 19*6=114. En OCR pone 22.00? Mirando imagen... ah, la fila 12-12.99 dice 19,00 y semana ... parece "114,00"? o quizas error en mi lectura. Usaré valores lógicos aproximados donde el OCR falle o sea confuso, pero el usuario pasó texto OCR: "19,00 € 22,00 € 456,00 €". Esto es claramente un error del OCR. 456/4 = 114. Pondré 114.00
+      { id: '9', range: 'De 12 a 12,99 mts.', daily: 19.00, weekly: 114.00, monthly: 456.00 },
       { id: '10', range: 'De 13 a 14,99 mts.', daily: 22.00, weekly: 137.00, monthly: 528.00 },
       { id: '11', range: 'De 15 a 17,99 mts.', daily: 27.50, weekly: 165.00, monthly: 660.00 },
       { id: '12', range: 'De 18 a 20,00 mts.', daily: 33.00, weekly: 193.00, monthly: 792.00 },
