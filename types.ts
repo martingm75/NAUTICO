@@ -8,17 +8,42 @@ export enum MooringStatus {
 
 export type PierZone = 'NORTE' | 'CENTRAL' | 'SUR';
 
+export interface Passenger {
+  id: string;
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  nationality: string;
+  documentType: string;
+  visa?: string;
+}
+
 export interface Boat {
   id: string;
   name: string;
   owner: string;
-  length: number; // in meters
-  beam: number;   // in meters
+  phone?: string;
+  email?: string;
+  length: number; 
+  beam: number;   
   arrivalDate: string;
+  arrivalTime?: string;
   departureDate: string;
+  departureTime?: string;
   registration: string;
-  isBase?: boolean; // New property to distinguish base boats
-  inDryDock?: boolean; // Propiedad para saber si está en Marina Seca
+  flag?: string; 
+  flagCode?: string; 
+  portOfRegistry?: string;
+  skipperId?: string; 
+  nationality?: string;
+  isBase?: boolean; 
+  inDryDock?: boolean;
+  // Campos específicos Anexo 2
+  lastPort?: string;
+  lastCountry?: string;
+  nextPort?: string;
+  nextCountry?: string;
+  passengers?: Passenger[];
 }
 
 export interface Mooring {
@@ -26,8 +51,8 @@ export interface Mooring {
   number: number;
   zone: PierZone;
   status: MooringStatus;
-  isSingle?: boolean; // Propiedad para plazas que van solas entre fingers
-  customFinger?: 'TOP' | 'BOTTOM' | 'BOTH' | 'NONE'; // Control manual del finger (Babor/Estribor)
+  isSingle?: boolean;
+  customFinger?: 'TOP' | 'BOTTOM' | 'BOTH' | 'NONE';
   boat?: Boat;
   maxDimensions: {
     length: number;
@@ -50,10 +75,11 @@ export interface MarinaStats {
 
 export interface TariffRow {
   id: string;
-  range: string; // e.g. "De 5 a 5,99 mts."
+  range: string;
   daily: number;
   weekly: number;
   monthly: number;
+  annual: number;
 }
 
 export interface TariffSeason {

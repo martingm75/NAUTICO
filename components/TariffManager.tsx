@@ -116,10 +116,11 @@ const TariffManager: React.FC<TariffManagerProps> = ({ tariffs, onUpdate }) => {
         <table className="w-full text-left border-collapse">
           <thead className="bg-slate-50 sticky top-0 z-10">
             <tr>
-              <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 w-1/3">Eslora</th>
+              <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 w-1/4">Eslora</th>
               <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Día (€)</th>
               <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Semana (€)</th>
               <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Mes (€)</th>
+              <th className="py-4 px-6 text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-200 text-right">Anual (€)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -135,7 +136,7 @@ const TariffManager: React.FC<TariffManagerProps> = ({ tariffs, onUpdate }) => {
                       step="0.01"
                       value={row.daily}
                       onChange={(e) => handlePriceChange(row.id, 'daily', e.target.value)}
-                      className="w-24 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
+                      className="w-20 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
                     />
                   ) : (
                     <span className="font-medium text-slate-600">{row.daily.toFixed(2)} €</span>
@@ -148,7 +149,7 @@ const TariffManager: React.FC<TariffManagerProps> = ({ tariffs, onUpdate }) => {
                       step="0.01"
                       value={row.weekly}
                       onChange={(e) => handlePriceChange(row.id, 'weekly', e.target.value)}
-                      className="w-24 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
+                      className="w-20 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
                     />
                   ) : (
                     <span className="font-medium text-slate-600">{row.weekly.toFixed(2)} €</span>
@@ -161,10 +162,23 @@ const TariffManager: React.FC<TariffManagerProps> = ({ tariffs, onUpdate }) => {
                       step="0.01"
                       value={row.monthly}
                       onChange={(e) => handlePriceChange(row.id, 'monthly', e.target.value)}
-                      className="w-24 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
+                      className="w-20 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
                     />
                   ) : (
                     <span className="font-medium text-slate-600">{row.monthly.toFixed(2)} €</span>
+                  )}
+                </td>
+                <td className="py-3 px-6 text-right">
+                  {isEditing ? (
+                    <input 
+                      type="number" 
+                      step="0.01"
+                      value={row.annual}
+                      onChange={(e) => handlePriceChange(row.id, 'annual', e.target.value)}
+                      className="w-20 text-right bg-white border border-sky-200 rounded-lg px-2 py-1 text-sm font-bold text-slate-800 focus:ring-2 focus:ring-sky-500 outline-none"
+                    />
+                  ) : (
+                    <span className="font-bold text-sky-600">{row.annual > 0 ? `${row.annual.toFixed(2)} €` : 'N/D'}</span>
                   )}
                 </td>
               </tr>
@@ -181,6 +195,7 @@ const TariffManager: React.FC<TariffManagerProps> = ({ tariffs, onUpdate }) => {
              <li>Estos precios incluyen el IVA, tasa de Portos de Galicia y servicios (agua, luz, aseos, wifi).</li>
              <li>La tarifa mensual se establece para estancias inferiores a 6 meses.</li>
              <li>A los socios del Club Náutico se les aplicará un descuento del 10% sobre estas tarifas.</li>
+             <li>Las tarifas marcadas como N/D no están disponibles para esa eslora específica bajo contrato anual.</li>
           </ul>
         </div>
       </div>
