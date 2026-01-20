@@ -92,8 +92,7 @@ const generateMoorings = (): Mooring[] => {
       status = MooringStatus.OCCUPIED;
     } else if (statusRoll < 0.70) {
       status = MooringStatus.RESERVED;
-    } else if (statusRoll < 0.75) {
-      // 5% de probabilidad de mantenimiento
+    } else if (statusRoll < 0.80) { // 10% probabilidad de mantenimiento/hibernación
       status = MooringStatus.MAINTENANCE;
     } else {
       status = MooringStatus.AVAILABLE;
@@ -104,6 +103,38 @@ const generateMoorings = (): Mooring[] => {
     const randomOwner = OWNER_NAMES[Math.floor(Math.random() * OWNER_NAMES.length)];
     const randomProv = REG_PROVINCES[Math.floor(Math.random() * REG_PROVINCES.length)];
     const randomYear = 20 + Math.floor(Math.random() * 5);
+
+    // Creamos barco si está ocupado O si está en mantenimiento (barco en marina seca asociado)
+    const hasBoat = status === MooringStatus.OCCUPIED || status === MooringStatus.MAINTENANCE;
+
+    const boatData = hasBoat ? {
+      id: `B-${globalId}`,
+      name: randomBoatName,
+      owner: randomOwner,
+      phone: `+34 6${Math.floor(10000000 + Math.random() * 90000000)}`,
+      email: `${randomBoatName.toLowerCase().replace(/\s/g, '')}@gmail.com`,
+      length: Math.max(dims.l - (Math.random() * 2), 4).toFixed(1) as any, 
+      beam: Math.max(dims.b - (Math.random() * 1), 2).toFixed(1) as any,
+      arrivalDate: `2024-${Math.floor(Math.random() * 12 + 1).toString().padStart(2, '0')}-15`,
+      departureDate: '',
+      registration: `7ª-${randomProv}-${globalId}-${randomYear}`,
+      flag: randomFlag.name,
+      flagCode: randomFlag.code,
+      portOfRegistry: randomFlag.name === 'España' ? 'Camariñas' : 'Registro Extranjero',
+      skipperId: `${Math.floor(10000000 + Math.random() * 90000000)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
+      nationality: randomFlag.name,
+      isBase: Math.random() > 0.6, // Más probabilidad de Base
+      // Si está en mantenimiento, simulamos hibernación
+      inDryDock: status === MooringStatus.MAINTENANCE,
+      maintenanceReturnDate: status === MooringStatus.MAINTENANCE 
+        ? `2024-${(new Date().getMonth() + 2).toString().padStart(2,'0')}-01` 
+        : undefined
+    } : undefined;
+
+    // Forzar que si es Mantenimiento, sea de Base
+    if (status === MooringStatus.MAINTENANCE && boatData) {
+      boatData.isBase = true;
+    }
 
     moorings.push({
       id: fullId,
@@ -116,24 +147,7 @@ const generateMoorings = (): Mooring[] => {
         length: dims.l,
         beam: dims.b
       },
-      boat: status === MooringStatus.OCCUPIED ? {
-        id: `B-${globalId}`,
-        name: randomBoatName,
-        owner: randomOwner,
-        phone: `+34 6${Math.floor(10000000 + Math.random() * 90000000)}`,
-        email: `${randomBoatName.toLowerCase().replace(/\s/g, '')}@gmail.com`,
-        length: Math.max(dims.l - (Math.random() * 2), 4).toFixed(1) as any, 
-        beam: Math.max(dims.b - (Math.random() * 1), 2).toFixed(1) as any,
-        arrivalDate: `2024-${Math.floor(Math.random() * 12 + 1).toString().padStart(2, '0')}-15`,
-        departureDate: '',
-        registration: `7ª-${randomProv}-${globalId}-${randomYear}`,
-        flag: randomFlag.name,
-        flagCode: randomFlag.code,
-        portOfRegistry: randomFlag.name === 'España' ? 'Camariñas' : 'Registro Extranjero',
-        skipperId: `${Math.floor(10000000 + Math.random() * 90000000)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
-        nationality: randomFlag.name,
-        isBase: Math.random() > 0.6 // Más probabilidad de Base
-      } : undefined
+      boat: boatData
     });
     globalId++;
   };

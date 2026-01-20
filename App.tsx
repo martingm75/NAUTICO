@@ -8,8 +8,9 @@ import StatsPanel from './components/StatsPanel';
 import Calculator from './components/Calculator';
 import TariffManager from './components/TariffManager';
 import RegistryManager from './components/RegistryManager';
+import PrintableMap from './components/PrintableMap';
 import { getMooringAdvice } from './services/geminiService';
-import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database, Container } from 'lucide-react';
+import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database, Container, Printer } from 'lucide-react';
 
 const App: React.FC = () => {
   // --- ESTADO DE AMARRES CON PERSISTENCIA ---
@@ -56,6 +57,7 @@ const App: React.FC = () => {
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [transitingBoat, setTransitingBoat] = useState<{ boat: Boat; sourceId: string; targetId: string } | null>(null);
+  const [showPrintMap, setShowPrintMap] = useState(false);
 
   // --- EFECTOS DE GUARDADO AUTOMÁTICO ---
   useEffect(() => {
@@ -238,6 +240,8 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
       {sidebarOpen && <div className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)}/>}
+      
+      {showPrintMap && <PrintableMap moorings={moorings} onClose={() => setShowPrintMap(false)} />}
 
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white p-6 transform transition-transform duration-300 lg:relative lg:translate-x-0 flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="flex items-center gap-2 mb-8">
@@ -298,21 +302,34 @@ const App: React.FC = () => {
             ) : (activeTab === 'registry' || activeTab === 'dry_dock') ? (
               <RegistryManager registry={boatRegistry} moorings={moorings} activeBoatIds={activeBoatIds} onUpdateRegistry={setBoatRegistry} onAssignToMooring={handleAssignRegistryBoat} initialTab={activeTab === 'dry_dock' ? 'dry_dock' : undefined} />
             ) : activeTab === 'list' ? (
-               <div className="p-4 overflow-auto h-full">
-                 <table className="w-full text-left">
-                   <thead className="sticky top-0 bg-white"><tr className="text-[10px] uppercase text-slate-400 border-b font-black tracking-widest"><th className="pb-4">Amarre</th><th className="pb-4">Estado</th><th className="pb-4">Embarcación</th><th className="pb-4">Patrón</th><th className="pb-4 text-right">Dimensiones</th></tr></thead>
-                   <tbody>
-                     {filteredMoorings.map(m => (
-                       <tr key={m.id} className="hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-50 last:border-0" onClick={() => setSelectedMooring(m)}>
-                         <td className="py-4 font-black text-slate-900">{m.id}</td>
-                         <td><span className={`px-2 py-0.5 rounded text-[9px] text-white font-black uppercase tracking-tighter ${STATUS_COLORS[m.status]}`}>{STATUS_LABELS[m.status]}</span></td>
-                         <td className="text-xs font-bold text-slate-700 uppercase">{m.boat?.name || '-'}</td>
-                         <td className="text-[10px] font-medium text-slate-500 uppercase">{m.boat?.owner || '-'}</td>
-                         <td className="text-right text-[10px] font-black text-slate-400">{m.maxDimensions.length}x{m.maxDimensions.beam}m</td>
-                       </tr>
-                     ))}
-                   </tbody>
-                 </table>
+               <div className="flex flex-col h-full">
+                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                    <div className="flex items-center gap-2">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                        <input className="bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs font-bold outline-none" placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+                      </div>
+                    </div>
+                    <button onClick={() => setShowPrintMap(true)} className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95">
+                      <Printer size={16} /> Imprimir Plano Actual
+                    </button>
+                 </div>
+                 <div className="p-4 overflow-auto flex-1">
+                   <table className="w-full text-left">
+                     <thead className="sticky top-0 bg-white"><tr className="text-[10px] uppercase text-slate-400 border-b font-black tracking-widest"><th className="pb-4">Amarre</th><th className="pb-4">Estado</th><th className="pb-4">Embarcación</th><th className="pb-4">Patrón</th><th className="pb-4 text-right">Dimensiones</th></tr></thead>
+                     <tbody>
+                       {filteredMoorings.map(m => (
+                         <tr key={m.id} className="hover:bg-slate-50 cursor-pointer transition-colors border-b border-slate-50 last:border-0" onClick={() => setSelectedMooring(m)}>
+                           <td className="py-4 font-black text-slate-900">{m.id}</td>
+                           <td><span className={`px-2 py-0.5 rounded text-[9px] text-white font-black uppercase tracking-tighter ${STATUS_COLORS[m.status]}`}>{STATUS_LABELS[m.status]}</span></td>
+                           <td className="text-xs font-bold text-slate-700 uppercase">{m.boat?.name || '-'}</td>
+                           <td className="text-[10px] font-medium text-slate-500 uppercase">{m.boat?.owner || '-'}</td>
+                           <td className="text-right text-[10px] font-black text-slate-400">{m.maxDimensions.length}x{m.maxDimensions.beam}m</td>
+                         </tr>
+                       ))}
+                     </tbody>
+                   </table>
+                 </div>
                </div>
              ) : activeTab === 'stats' ? <div className="p-6 overflow-auto"><StatsPanel moorings={moorings} registry={boatRegistry}/></div> : 
              activeTab === 'calculator' ? <div className="p-6 flex items-center justify-center h-full bg-slate-50"><Calculator /></div> :
