@@ -17,13 +17,15 @@ const FLAGS = [
 const BOAT_NAMES = [
   'Sea Breeze', 'Galerna', 'Albatros', 'Poseidón', 'Mare Nostrum', 'Eolo', 'Sirena del Mar', 'Orca II', 
   'Nereida', 'Odisea', 'Mar de Fondo', 'Estrella Polar', 'Viento del Sur', 'Libertad', 'Amanecer', 
-  'Delfín Solitario', 'Vikingo', 'Bahía Azul', 'Cormorán', 'Tempestad', 'Calma Chicha', 'Corsario'
+  'Delfín Solitario', 'Vikingo', 'Bahía Azul', 'Cormorán', 'Tempestad', 'Calma Chicha', 'Corsario',
+  'Azul Profundo', 'Nautilus', 'Boreal', 'Aventurero', 'Horizonte', 'Marea Alta'
 ];
 
 const OWNER_NAMES = [
   'Juan Pérez García', 'Marta Rodríguez Ruiz', 'Pierre Dubois', 'Hans Müller', 'Elena García Santos', 
   'Luigi Verdi', 'Antonio Da Silva', 'Robert Smith', 'Krzysztof Nowak', 'Giorgos Papadopoulos',
-  'Carmen Lema Varela', 'Santiago Martínez', 'Isabel Castro', 'Francisco Javier Sordo'
+  'Carmen Lema Varela', 'Santiago Martínez', 'Isabel Castro', 'Francisco Javier Sordo',
+  'Ana Belén López', 'Miguel Ángel Torres', 'Laura Díaz', 'Carlos Ruiz'
 ];
 
 const REG_PROVINCES = ['CO', 'VI', 'SS', 'BA', 'MA', 'AL', 'GC'];
@@ -82,10 +84,20 @@ const generateMoorings = (): Mooring[] => {
       dims = { l: overrideLength, b: overrideBeam };
     }
 
+    // Probabilidades ajustadas para más ocupación y mantenimiento
     const statusRoll = Math.random();
     let status = MooringStatus.AVAILABLE;
-    if (statusRoll > 0.6) status = MooringStatus.OCCUPIED;
-    else if (statusRoll > 0.9) status = MooringStatus.RESERVED;
+    
+    if (statusRoll < 0.60) {
+      status = MooringStatus.OCCUPIED;
+    } else if (statusRoll < 0.70) {
+      status = MooringStatus.RESERVED;
+    } else if (statusRoll < 0.75) {
+      // 5% de probabilidad de mantenimiento
+      status = MooringStatus.MAINTENANCE;
+    } else {
+      status = MooringStatus.AVAILABLE;
+    }
 
     const randomFlag = FLAGS[Math.floor(Math.random() * FLAGS.length)];
     const randomBoatName = BOAT_NAMES[Math.floor(Math.random() * BOAT_NAMES.length)];
@@ -120,7 +132,7 @@ const generateMoorings = (): Mooring[] => {
         portOfRegistry: randomFlag.name === 'España' ? 'Camariñas' : 'Registro Extranjero',
         skipperId: `${Math.floor(10000000 + Math.random() * 90000000)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
         nationality: randomFlag.name,
-        isBase: Math.random() > 0.7
+        isBase: Math.random() > 0.6 // Más probabilidad de Base
       } : undefined
     });
     globalId++;
@@ -201,7 +213,7 @@ export const STATUS_COLORS = {
   [MooringStatus.AVAILABLE]: 'bg-emerald-500',
   [MooringStatus.OCCUPIED]: 'bg-rose-600',
   [MooringStatus.RESERVED]: 'bg-amber-500',
-  [MooringStatus.MAINTENANCE]: 'bg-slate-400'
+  [MooringStatus.MAINTENANCE]: 'bg-indigo-600'
 };
 
 export const BASE_BOAT_COLOR = 'bg-slate-900';
@@ -212,7 +224,7 @@ export const STATUS_LABELS = {
   [MooringStatus.AVAILABLE]: 'Disponible',
   [MooringStatus.OCCUPIED]: 'Ocupado',
   [MooringStatus.RESERVED]: 'Reservado',
-  [MooringStatus.MAINTENANCE]: 'Mantenimiento'
+  [MooringStatus.MAINTENANCE]: 'Marina Seca / Mant.'
 };
 
 export const FLAG_ISO_MAP: Record<string, string> = {

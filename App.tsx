@@ -314,7 +314,7 @@ const App: React.FC = () => {
                    </tbody>
                  </table>
                </div>
-             ) : activeTab === 'stats' ? <div className="p-6 overflow-auto"><StatsPanel moorings={moorings}/></div> : 
+             ) : activeTab === 'stats' ? <div className="p-6 overflow-auto"><StatsPanel moorings={moorings} registry={boatRegistry}/></div> : 
              activeTab === 'calculator' ? <div className="p-6 flex items-center justify-center h-full bg-slate-50"><Calculator /></div> :
              activeTab === 'tariffs' ? <div className="h-full"><TariffManager tariffs={tariffs} onUpdate={setTariffs} /></div> :
              <div className="p-6 flex flex-col h-full max-w-2xl mx-auto w-full">

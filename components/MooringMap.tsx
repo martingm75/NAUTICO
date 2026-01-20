@@ -559,7 +559,20 @@ const MooringMap: React.FC<MooringMapProps> = ({
       const pillFill = "rgba(255, 255, 255, 0.95)";
       const pillStroke = m.boat ? "#1e293b" : "#cbd5e1";
       const textFill = "fill-slate-900";
-      const slotFill = isSelected ? "rgba(255, 255, 255, 0.4)" : (m.status === MooringStatus.RESERVED ? "rgba(251, 191, 36, 0.6)" : "rgba(255, 255, 255, 0.15)"); 
+      
+      // LOGICA DE COLORES DEL SLOT (AGUA)
+      let slotFill = "rgba(255, 255, 255, 0.15)"; // Por defecto (Ocupado o neutro)
+      
+      if (isSelected) {
+        slotFill = "rgba(255, 255, 255, 0.5)";
+      } else if (m.status === MooringStatus.AVAILABLE) {
+        slotFill = "rgba(16, 185, 129, 0.4)"; // VERDE ESMERALDA (LIBRE)
+      } else if (m.status === MooringStatus.RESERVED) {
+        slotFill = "rgba(251, 191, 36, 0.6)"; // ÁMBAR (RESERVA)
+      } else if (m.status === MooringStatus.MAINTENANCE) {
+        slotFill = "rgba(79, 70, 229, 0.6)"; // ÍNDIGO (MANTENIMIENTO)
+      }
+
       const slotStroke = isSelected ? "white" : "rgba(255,255,255,0.3)";
       const boatBeam = h * 0.8;
       const boatLength = w * 0.85;
@@ -590,6 +603,14 @@ const MooringMap: React.FC<MooringMapProps> = ({
     const headBoatLength = hammerConcreteWidth - 100;
     const headBoatBeam = 240;
 
+    let headSlotFill = "rgba(255, 255, 255, 0.15)";
+    if (headMooring) {
+        if (selectedId === headMooring.id) headSlotFill = "rgba(255, 255, 255, 0.4)";
+        else if (headMooring.status === MooringStatus.AVAILABLE) headSlotFill = "rgba(16, 185, 129, 0.4)";
+        else if (headMooring.status === MooringStatus.RESERVED) headSlotFill = "rgba(251, 191, 36, 0.6)";
+        else if (headMooring.status === MooringStatus.MAINTENANCE) headSlotFill = "rgba(79, 70, 229, 0.6)";
+    }
+
     return (
       <g key={zone} transform={`translate(${xOffset}, 0)`}>
         <rect x="0" y={PIER_Y_OFFSET} width={walkwayWidth} height={fixedHeight + hammerHeight + slotStartY} fill="#1e293b" rx="10" />
@@ -603,7 +624,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
           <g transform={`translate(${walkwayWidth/2}, ${piersEndAt})`}>
              <rect x={-hammerConcreteWidth / 2} y={-50} width={hammerConcreteWidth} height={hammerHeight + 50} fill="#1e293b" rx="10" />
              <g onClick={(e) => { e.stopPropagation(); onSelectMooring(headMooring); }} className="cursor-pointer">
-              <rect x={-hammerConcreteWidth / 2} y={hammerHeight + 20} width={hammerConcreteWidth} height={280} fill={selectedId === headMooring.id ? "rgba(255,255,255,0.4)" : (headMooring.status === MooringStatus.RESERVED ? "rgba(251, 191, 36, 0.6)" : "rgba(255,255,255,0.15)")} stroke={selectedId === headMooring.id ? "white" : "rgba(255,255,255,0.3)"} strokeWidth={10} rx="40" />
+              <rect x={-hammerConcreteWidth / 2} y={hammerHeight + 20} width={hammerConcreteWidth} height={280} fill={headSlotFill} stroke={selectedId === headMooring.id ? "white" : "rgba(255,255,255,0.3)"} strokeWidth={10} rx="40" />
               {headMooring.boat && (
                 <g transform={`translate(0, ${hammerHeight + 20 + 140}) rotate(90) translate(${-headBoatBeam/2}, ${-headBoatLength/2})`} style={{ pointerEvents: 'none' }}>
                    <BoatIcon width={headBoatBeam} height={headBoatLength} isBase={headMooring.boat.isBase} />
@@ -706,10 +727,11 @@ const MooringMap: React.FC<MooringMapProps> = ({
                 <button onClick={(e) => { e.stopPropagation(); setShowLegend(false); }} className="text-slate-400 hover:text-slate-600 p-1"><X size={16} /></button>
               </div>
               <div className="grid gap-3">
-                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#1e293b]"></div><span className="text-[10px] font-bold text-slate-700 uppercase">SOCIO</span></div>
+                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#1e293b]"></div><span className="text-[10px] font-bold text-slate-700 uppercase">BASE</span></div>
                 <div className="flex items-center gap-3"><div className="w-4 h-4 rounded bg-[#ef4444]"></div><span className="text-[10px] font-bold text-slate-700 uppercase">TRÁNSITO</span></div>
-                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-white bg-white/20"></div><span className="text-[10px] font-bold text-slate-700 uppercase">LIBRE</span></div>
+                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-emerald-600 bg-emerald-500/50"></div><span className="text-[10px] font-bold text-slate-700 uppercase">LIBRE</span></div>
                 <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-white bg-[#fcd34d]/60"></div><span className="text-[10px] font-bold text-slate-700 uppercase">RESERVA</span></div>
+                <div className="flex items-center gap-3"><div className="w-4 h-4 rounded border-2 border-white bg-indigo-600/60"></div><span className="text-[10px] font-bold text-slate-700 uppercase">MANTENIMIENTO</span></div>
               </div>
             </div>
           ) : (
