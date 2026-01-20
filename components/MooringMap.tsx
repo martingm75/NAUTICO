@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mooring, PierZone, MooringStatus, Boat } from '../types';
 import { MAP_BASE_BOAT_COLOR, MAP_TRANSIT_BOAT_COLOR } from '../constants';
-import { Maximize, Info, ChevronRight, Anchor, X } from 'lucide-react';
+import { Maximize, Info, X } from 'lucide-react';
 
 interface MooringMapProps {
   moorings: Mooring[];
@@ -32,7 +32,20 @@ const MooringMap: React.FC<MooringMapProps> = ({
   const [isPanning, setIsPanning] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [showLegend, setShowLegend] = useState(false);
+  
+  // Estados de animación
   const [animPos, setAnimPos] = useState<{ x: number; y: number; rotation: number } | null>(null);
+  const [sailorPos, setSailorPos] = useState<{ 
+    x: number; 
+    y: number; 
+    opacity: number; 
+    rotation: number; 
+    bob: number; 
+    tick: number; // Para animar extremidades
+    isCatching: boolean; // Recogiendo cabo
+    isWaving: boolean;   // Despidiendo
+  } | null>(null);
+  const [ropePath, setRopePath] = useState<string | null>(null);
 
   // Configuración geométrica
   const walkwayWidth = 140; 
@@ -85,7 +98,6 @@ const MooringMap: React.FC<MooringMapProps> = ({
     setPosition({ x, y });
   }, []);
 
-  // UseEffect normal con debounce para evitar parpadeo
   useEffect(() => {
     fitToScreen();
     
@@ -104,7 +116,6 @@ const MooringMap: React.FC<MooringMapProps> = ({
     };
   }, [fitToScreen]);
 
-  // Helper para identificar cabeceras
   const isHeadMooring = (id: string) => {
     return id.endsWith('G') || id === 'P2/26C' || id.includes('P3/35');
   };
@@ -113,16 +124,18 @@ const MooringMap: React.FC<MooringMapProps> = ({
   useEffect(() => {
     if (!transitingBoat) {
       setAnimPos(null);
+      setSailorPos(null);
+      setRopePath(null);
       return;
     }
     
     const getCoords = (mooringId: string) => {
-      if (mooringId === 'EXIT') {
-        return { x: 100, y: 5800, w: 0, h: 0, isRight: true, isHead: false };
+      if (mooringId === 'EXIT' || mooringId === 'ENTRY') {
+        return { x: 100, y: 5800, w: 0, h: 0, isRight: true, isHead: false, zone: null };
       }
 
       const mooring = moorings.find(m => m.id === mooringId);
-      if (!mooring) return { x: 0, y: 0, w: 0, h: 0, isRight: false };
+      if (!mooring) return { x: 0, y: 0, w: 0, h: 0, isRight: false, zone: null };
       
       const xOffset = PIER_OFFSETS[mooring.zone];
       const isHead = isHeadMooring(mooring.id);
@@ -134,13 +147,13 @@ const MooringMap: React.FC<MooringMapProps> = ({
           w: 800, 
           h: 400, 
           isRight: false,
-          isHead: true 
+          isHead: true,
+          zone: mooring.zone
         };
       }
 
       const pierMoorings = moorings.filter(m => m.zone === mooring.zone && !isHeadMooring(m.id));
       
-      // Separar lados
       const leftSide = pierMoorings.filter(m => parseInt(m.id.split('/')[1]) % 2 !== 0).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
       const rightSide = pierMoorings.filter(m => parseInt(m.id.split('/')[1]) % 2 === 0).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
       
@@ -154,47 +167,86 @@ const MooringMap: React.FC<MooringMapProps> = ({
       const y = PIER_Y_OFFSET + slotStartY + (index * slotHeight);
       const h = slotHeight - 10;
       
-      // Cálculo del ancho visual para animación (debe coincidir con renderSlot)
-      let w = 400; // Default C
-      if (mooring.id.includes('A')) w = 260; // 6m
-      else if (mooring.id.includes('B')) w = 320; // 8m
-      else if (mooring.id.includes('C')) w = 400; // 10m
-      else if (mooring.id.includes('D')) w = 500; // 12m
-      else if (mooring.id.includes('G')) w = 600; // Head
+      let w = 400;
+      if (mooring.id.includes('A')) w = 260; 
+      else if (mooring.id.includes('B')) w = 320;
+      else if (mooring.id.includes('C')) w = 400;
+      else if (mooring.id.includes('D')) w = 500;
+      else if (mooring.id.includes('G')) w = 600;
       
       const x = isRight ? xOffset + walkwayWidth : xOffset - w;
 
-      return { x: x + w/2, y: y + h/2, w, h, isRight, isHead: false };
+      return { x: x + w/2, y: y + h/2, w, h, isRight, isHead: false, zone: mooring.zone };
     };
 
     const start = getCoords(transitingBoat.sourceId);
     const end = getCoords(transitingBoat.targetId);
 
-    const waypoints = [
-      { x: start.x, y: start.y },
-      { x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: start.y },
-      { x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: PIER_Y_OFFSET + SNL_Y },
-      { x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: PIER_Y_OFFSET + SNL_Y },
-      { x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: end.y },
-      { x: end.x, y: end.y }
-    ];
+    // --- CONFIGURACIÓN MARINERO (ENTRADA Y SALIDA) ---
+    let sailorStartPoint = null;
+    let sailorEndPoint = null;
+    let sailorAngle = 0;
+    
+    const isEntry = transitingBoat.sourceId === 'ENTRY';
+    const isExit = transitingBoat.targetId === 'EXIT';
+
+    if (isEntry && end.zone) {
+      // Entrada: Corre desde el inicio del pantalán hasta la plaza
+      const zoneOffset = PIER_OFFSETS[end.zone as PierZone];
+      sailorStartPoint = { x: zoneOffset + walkwayWidth / 2, y: PIER_Y_OFFSET };
+      sailorEndPoint = { x: zoneOffset + walkwayWidth / 2, y: end.y };
+      sailorAngle = Math.atan2(sailorEndPoint.y - sailorStartPoint.y, sailorEndPoint.x - sailorStartPoint.x) * (180 / Math.PI) + 90;
+    } else if (isExit && start.zone) {
+      // Salida: Aparece en el pantalán cerca de la plaza y despide
+      const zoneOffset = PIER_OFFSETS[start.zone as PierZone];
+      // Empieza un poco antes en el pasillo y corre hacia la posición exacta del barco
+      sailorStartPoint = { x: zoneOffset + walkwayWidth / 2, y: start.y - 200 };
+      sailorEndPoint = { x: zoneOffset + walkwayWidth / 2, y: start.y };
+      
+      // Orientación hacia el mar/salida
+      sailorAngle = 180; 
+    }
+    // -----------------------
+
+    const waypoints = [];
 
     if (transitingBoat.targetId === 'EXIT') {
-      waypoints.length = 0; 
       waypoints.push({ x: start.x, y: start.y });
       waypoints.push({ x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: start.y });
       waypoints.push({ x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: PIER_Y_OFFSET + SNL_Y });
-      waypoints.push({ x: 100, y: PIER_Y_OFFSET + SNL_Y });
-      waypoints.push({ x: 100, y: 5800 });
+      waypoints.push({ x: 100, y: PIER_Y_OFFSET + SNL_Y }); 
+      waypoints.push({ x: 100, y: 5800 }); 
+    } else if (transitingBoat.sourceId === 'ENTRY') {
+      waypoints.push({ x: 100, y: 5800 }); 
+      waypoints.push({ x: 100, y: PIER_Y_OFFSET + SNL_Y }); 
+      waypoints.push({ x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: PIER_Y_OFFSET + SNL_Y }); 
+      waypoints.push({ x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: end.y }); 
+      waypoints.push({ x: end.x, y: end.y }); 
+    } else {
+      // Traslado interno
+      waypoints.push({ x: start.x, y: start.y });
+      waypoints.push({ x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: start.y });
+      waypoints.push({ x: start.isHead ? start.x : (start.isRight ? start.x + 800 : start.x - 800), y: PIER_Y_OFFSET + SNL_Y });
+      waypoints.push({ x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: PIER_Y_OFFSET + SNL_Y });
+      waypoints.push({ x: end.isHead ? end.x : (end.isRight ? end.x + 800 : end.x - 800), y: end.y });
+      waypoints.push({ x: end.x, y: end.y });
     }
 
     let currentWaypoint = 0;
     let startTime = performance.now();
-    const speed = 1.8; 
+    const speed = 0.5; 
+
+    let totalDist = 0;
+    for(let i=0; i<waypoints.length-1; i++) {
+        totalDist += Math.sqrt(Math.pow(waypoints[i+1].x - waypoints[i].x, 2) + Math.pow(waypoints[i+1].y - waypoints[i].y, 2));
+    }
+    const totalDuration = totalDist / speed;
 
     const animate = (time: number) => {
       if (currentWaypoint >= waypoints.length - 1) {
         onAnimationComplete?.(transitingBoat.targetId, transitingBoat.boat);
+        setSailorPos(null);
+        setRopePath(null);
         return;
       }
 
@@ -211,6 +263,96 @@ const MooringMap: React.FC<MooringMapProps> = ({
 
       setAnimPos({ x: curX, y: curY, rotation: angle });
 
+      // --- ANIMACIÓN MARINERO Y CABO ---
+      if (sailorStartPoint && sailorEndPoint) {
+         let currentSailorPos = { x: sailorEndPoint.x, y: sailorEndPoint.y };
+         let isCatching = false;
+         let isWaving = false;
+         let bob = 0;
+
+         // Lógica de Entrada (Original)
+         if (isEntry) {
+             if (currentWaypoint < 2) {
+                 const sailorDistY = sailorEndPoint.y - sailorStartPoint.y;
+                 const sailorProgress = Math.min((performance.now() - (startTime - elapsed)) / (totalDuration * 0.4), 1);
+                 const sailorY = sailorStartPoint.y + sailorDistY * sailorProgress;
+                 
+                 bob = Math.sin(time / 50) * 15; 
+                 currentSailorPos = { x: sailorEndPoint.x, y: sailorY };
+             } else {
+                 isCatching = true;
+                 currentSailorPos = { x: sailorEndPoint.x, y: sailorEndPoint.y };
+             }
+         } 
+         // Lógica de Salida (Nueva: Correr -> Despedir)
+         else if (isExit) {
+             const runDuration = 1000; // Corre durante el primer segundo
+             const timeSinceStart = performance.now() - (startTime - elapsed); // Tiempo absoluto aproximado de animación
+             
+             // Fase 1: Correr a posición
+             if (currentWaypoint === 0 && t < 0.5) {
+                 const progress = t * 2; // Normalizado 0-1
+                 const sailorDistY = sailorEndPoint.y - sailorStartPoint.y;
+                 const sailorY = sailorStartPoint.y + sailorDistY * progress;
+                 bob = Math.sin(time / 50) * 15;
+                 currentSailorPos = { x: sailorEndPoint.x, y: sailorY };
+             } 
+             // Fase 2: Saludar
+             else {
+                 isWaving = true;
+                 currentSailorPos = { x: sailorEndPoint.x, y: sailorEndPoint.y };
+                 // Si es salida, el marinero mira hacia el barco que se va
+                 // Ajustamos la rotación para que mire al canal (90 o -90)
+                 sailorAngle = start.isRight ? -90 : 90;
+             }
+         }
+
+         setSailorPos({ 
+            x: currentSailorPos.x, 
+            y: currentSailorPos.y, 
+            opacity: 1, 
+            rotation: sailorAngle, 
+            bob: bob,
+            tick: time,
+            isCatching: isCatching,
+            isWaving: isWaving
+         });
+
+         // --- LÓGICA CABO (SOLO ENTRADA) ---
+         if (isEntry) {
+             const distToSailor = Math.sqrt(Math.pow(curX - currentSailorPos.x, 2) + Math.pow(curY - currentSailorPos.y, 2));
+             const THROW_DISTANCE_START = 1600; 
+             const THROW_DISTANCE_END = 800;    
+
+             if (currentWaypoint >= waypoints.length - 2 && distToSailor < THROW_DISTANCE_START) {
+                 const angleRad = (angle - 90) * (Math.PI / 180);
+                 const bowOffset = 300; 
+                 const bowX = curX + bowOffset * Math.cos(angleRad);
+                 const bowY = curY + bowOffset * Math.sin(angleRad);
+
+                 let throwProgress = (THROW_DISTANCE_START - distToSailor) / (THROW_DISTANCE_START - THROW_DISTANCE_END);
+                 throwProgress = Math.max(0, Math.min(1, throwProgress));
+
+                 const ropeTipX = bowX + (currentSailorPos.x - bowX) * throwProgress;
+                 const ropeTipY = bowY + (currentSailorPos.y - bowY) * throwProgress;
+
+                 const midX = (bowX + ropeTipX) / 2;
+                 const midY = (bowY + ropeTipY) / 2;
+                 
+                 const gravityFactor = throwProgress < 1 ? 0.05 : 0.15;
+                 const gravity = distToSailor * gravityFactor;
+                 const controlX = midX; 
+                 const controlY = midY + gravity; 
+
+                 setRopePath(`M ${bowX} ${bowY} Q ${controlX} ${controlY} ${ropeTipX} ${ropeTipY}`);
+             } else {
+                 setRopePath(null);
+             }
+         } else {
+             setRopePath(null);
+         }
+      }
+
       if (t >= 1) {
         currentWaypoint++;
         startTime = time;
@@ -222,67 +364,45 @@ const MooringMap: React.FC<MooringMapProps> = ({
     return () => cancelAnimationFrame(animReq);
   }, [transitingBoat, moorings, onAnimationComplete]);
 
-  // --- Manejo de eventos del Mouse (Desktop) ---
+  // Manejadores de eventos (Mouse/Touch) - Sin cambios sustanciales
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.01 : 0.01;
     setScale(prev => Math.min(Math.max(prev + delta, minScale), 5));
   };
-
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     setIsPanning(true);
     setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
   };
-
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
       setPosition({ x: e.clientX - dragStart.x, y: e.clientY - dragStart.y });
     }
   };
-
   const handleEnd = () => setIsPanning(false);
-
-  // --- Manejo de eventos Táctiles (Mobile) ---
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 1) {
       setIsPanning(true);
       setDragStart({ x: e.touches[0].clientX - position.x, y: e.touches[0].clientY - position.y });
     } else if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
       lastTouchRef.current = { dist };
     }
   };
-
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 1 && isPanning) {
-      setPosition({
-        x: e.touches[0].clientX - dragStart.x,
-        y: e.touches[0].clientY - dragStart.y
-      });
+      setPosition({ x: e.touches[0].clientX - dragStart.x, y: e.touches[0].clientY - dragStart.y });
     } else if (e.touches.length === 2 && lastTouchRef.current) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
       const scaleFactor = dist / lastTouchRef.current.dist;
-      const newScale = Math.min(Math.max(scale * scaleFactor, minScale), 5);
-      
-      setScale(newScale);
+      setScale(Math.min(Math.max(scale * scaleFactor, minScale), 5));
       lastTouchRef.current = { dist };
     }
   };
+  const handleTouchEnd = () => { setIsPanning(false); lastTouchRef.current = null; };
 
-  const handleTouchEnd = () => {
-    setIsPanning(false);
-    lastTouchRef.current = null;
-  };
-
-  // --- Renderizado ---
+  // --- Renderizado de Iconos ---
 
   const BoatIcon = ({ width, height, isBase = false }: { width: number, height: number, isBase?: boolean }) => {
     const boatColor = isBase ? MAP_BASE_BOAT_COLOR : MAP_TRANSIT_BOAT_COLOR;
@@ -293,6 +413,81 @@ const MooringMap: React.FC<MooringMapProps> = ({
         <path d={`M ${width*0.5} ${height*0.96} L ${width*0.1} ${height*0.72} Q ${width*0.1} ${height*0.2}, ${width*0.5} ${height*0.1} Q ${width*0.9} ${height*0.2}, ${width*0.9} ${height*0.72} Z`} fill={boatColor} />
         <path d={`M ${width*0.25} ${height*0.65} L ${width*0.75} ${height*0.65} L ${width*0.8} ${height*0.45} Q ${width*0.5} ${height*0.35}, ${width*0.2} ${height*0.45} Z`} fill="white" fillOpacity="0.8" />
         <rect x={width*0.35} y={height*0.7} width={width*0.3} height={height*0.18} rx={width*0.03} fill="white" fillOpacity="0.3" />
+        {/* Cleat/Cornamusa en proa para que el cabo salga de algo físico */}
+        <circle cx={width*0.5} cy={height*0.05} r={width*0.04} fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
+      </g>
+    );
+  };
+
+  const SailorIcon = ({ tick, isCatching, isWaving }: { tick: number, isCatching: boolean, isWaving: boolean }) => {
+    // Animación de carrera (Braceo opuesto a piernas)
+    const swing = (isCatching || isWaving) ? 0 : Math.sin(tick / 50); 
+    
+    // Multiplicadores para amplitud de movimiento
+    const armSwing = swing * 4;
+    const legSwing = swing * 3;
+
+    // Animación de saludo
+    const waveSwing = isWaving ? Math.sin(tick / 100) * 10 : 0; // Oscilación mano saludando
+
+    // Coordenadas locales para extremidades
+    // isCatching: Brazos adelante (-Y) y abiertos (X) para recibir cabo.
+    // isWaving: Brazo derecho levantado y saludando
+    const leftArmY = isCatching ? -8 : -3 + armSwing; 
+    // Si saluda, brazo derecho (en pantalla a la derecha) sube mucho (-12) y oscila en X
+    const rightArmY = isWaving ? -12 : (isCatching ? -8 : -3 - armSwing);
+    
+    const leftArmX = isCatching ? -6 : -8; 
+    const rightArmX = isWaving ? 8 + waveSwing/2 : (isCatching ? 6 : 8); // Oscilación ligera en X si saluda
+
+    const leftLegY = (isCatching || isWaving) ? 4 : 4 - legSwing; 
+    const rightLegY = (isCatching || isWaving) ? 4 : 4 + legSwing;
+
+    return (
+      <g transform="scale(6)"> 
+        {/* Sombra */}
+        <ellipse cx="0" cy="5" rx="7" ry="3" fill="black" opacity="0.3" />
+        
+        {/* Piernas (Pantalón Azul Marino) */}
+        {/* Usamos Path con stroke grueso para dar volumen a las piernas */}
+        <path d={`M -3 2 L -3 ${leftLegY}`} stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+        <path d={`M 3 2 L 3 ${rightLegY}`} stroke="#1e293b" strokeWidth="3.5" strokeLinecap="round" />
+        
+        {/* Zapatos (Negros) */}
+        <circle cx="-3" cy={leftLegY} r="1.8" fill="#0f172a" />
+        <circle cx="3" cy={rightLegY} r="1.8" fill="#0f172a" />
+
+        {/* Torso (Chaleco Naranja Alta Visibilidad) */}
+        {/* Forma trapezoidal para simular hombros */}
+        <path d="M -6 -5 L 6 -5 L 5 4 L -5 4 Z" fill="#f97316" stroke="#ea580c" strokeWidth="0.5" />
+        
+        {/* Cintas Reflectantes (Amarillo intenso) */}
+        <path d="M -6 -2 L 6 -2" stroke="#fde047" strokeWidth="2" /> {/* Cinta Horizontal Pecho */}
+        <path d="M -5 -5 L -4 4" stroke="#fde047" strokeWidth="1" opacity="0.7" /> {/* Tirante Izq */}
+        <path d="M 5 -5 L 4 4" stroke="#fde047" strokeWidth="1" opacity="0.7" /> {/* Tirante Der */}
+
+        {/* Cabeza (Piel) */}
+        <circle cx="0" cy="-5" r="4.5" fill="#fcd34d" stroke="#d97706" strokeWidth="0.5" />
+        
+        {/* Gorra Marinero (Blanca) */}
+        <path d="M -5 -6 Q 0 -11 5 -6 L 5 -4 L -5 -4 Z" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="0.5" />
+        {/* Visera */}
+        <path d="M -5 -4 Q 0 -1 5 -4" fill="none" stroke="#f8fafc" strokeWidth="2" />
+
+        {/* Brazos (Mangas azules + Manos piel) */}
+        {/* Brazo Izquierdo */}
+        <path d={`M -6 -4 L ${leftArmX} ${leftArmY}`} stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
+        <circle cx={leftArmX} cy={leftArmY} r="2" fill="#fcd34d" stroke="#d97706" strokeWidth="0.5" /> 
+
+        {/* Brazo Derecho */}
+        {/* Si saluda, el brazo rota desde el hombro */}
+        <path d={`M 6 -4 L ${rightArmX} ${rightArmY}`} stroke="#1e293b" strokeWidth="3" strokeLinecap="round" />
+        <circle cx={rightArmX} cy={rightArmY} r="2" fill="#fcd34d" stroke="#d97706" strokeWidth="0.5" /> 
+        
+        {/* Si saluda, añadir líneas de movimiento tipo "onda" */}
+        {isWaving && (
+             <path d={`M ${rightArmX + 3} ${rightArmY - 2} Q ${rightArmX + 6} ${rightArmY} ${rightArmX + 3} ${rightArmY + 2}`} fill="none" stroke="white" strokeWidth="1" opacity="0.6" />
+        )}
       </g>
     );
   };
@@ -332,97 +527,55 @@ const MooringMap: React.FC<MooringMapProps> = ({
             }
           }
         }
-
         return { ...m, drawFingerTop: drawTop, drawFingerBottom: drawBottom };
       });
     };
 
     const leftRaw = sideMoorings.filter(m => parseInt(m.id.split('/')[1]) % 2 !== 0).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
     const rightRaw = sideMoorings.filter(m => parseInt(m.id.split('/')[1]) % 2 === 0).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
-    
     const leftSide = prepareSide(leftRaw);
     const rightSide = prepareSide(rightRaw);
-
     const leftSlotHeight = leftSide.length > 0 ? fixedHeight / leftSide.length : 0;
     const rightSlotHeight = rightSide.length > 0 ? fixedHeight / rightSide.length : 0;
 
     const renderSlot = (item: Mooring & { drawFingerTop: boolean; drawFingerBottom: boolean }, i: number, isRight: boolean) => {
       const m = item;
       const slotHeight = isRight ? rightSlotHeight : leftSlotHeight;
-      
       const y = PIER_Y_OFFSET + slotStartY + (i * slotHeight);
-      
-      // ANCHO VISUAL SEGÚN LETRA (Eslora)
-      // A(6m): 260, B(8m): 320, C(10m): 400, D(12m): 500
-      let w = 400; // Default C
+      let w = 400; 
       if (m.id.includes('A')) w = 260;
       else if (m.id.includes('B')) w = 320;
       else if (m.id.includes('C')) w = 400;
       else if (m.id.includes('D')) w = 500;
-      
       const h = slotHeight - 10; 
       const isSelected = selectedId === m.id;
-      
       const xWater = isRight ? walkwayWidth : -w;
-      
       const fingerLen = w * 0.9;
       const fingerX = isRight ? walkwayWidth : -fingerLen;
       const fingerYTop = y - 10; 
       const fingerYBottom = y + h; 
-
       const centerX = xWater + w / 2;
       const centerY = y + h / 2;
-
       const pillFill = "rgba(255, 255, 255, 0.95)";
       const pillStroke = m.boat ? "#1e293b" : "#cbd5e1";
       const textFill = "fill-slate-900";
-
-      const slotFill = isSelected 
-        ? "rgba(255, 255, 255, 0.4)" 
-        : (m.status === MooringStatus.RESERVED 
-          ? "rgba(251, 191, 36, 0.6)" 
-          : "rgba(255, 255, 255, 0.15)"); 
-
+      const slotFill = isSelected ? "rgba(255, 255, 255, 0.4)" : (m.status === MooringStatus.RESERVED ? "rgba(251, 191, 36, 0.6)" : "rgba(255, 255, 255, 0.15)"); 
       const slotStroke = isSelected ? "white" : "rgba(255,255,255,0.3)";
-
       const boatBeam = h * 0.8;
       const boatLength = w * 0.85;
-
       const rotation = isRight ? -90 : 90;
 
       return (
         <g key={m.id}>
-          {item.drawFingerTop && (
-            <rect 
-              x={fingerX} 
-              y={fingerYTop} 
-              width={fingerLen} 
-              height={fingerWidth} 
-              fill="#334155" 
-              rx="2"
-            />
-          )}
-          
-          {item.drawFingerBottom && (
-            <rect 
-              x={fingerX} 
-              y={fingerYBottom} 
-              width={fingerLen} 
-              height={fingerWidth} 
-              fill="#334155" 
-              rx="2"
-            />
-          )}
-
+          {item.drawFingerTop && <rect x={fingerX} y={fingerYTop} width={fingerLen} height={fingerWidth} fill="#334155" rx="2"/>}
+          {item.drawFingerBottom && <rect x={fingerX} y={fingerYBottom} width={fingerLen} height={fingerWidth} fill="#334155" rx="2"/>}
           <g onClick={(e) => { e.stopPropagation(); onSelectMooring(m); }} className="cursor-pointer">
             <rect x={xWater} y={y} width={w} height={h} fill={slotFill} stroke={slotStroke} strokeWidth={isSelected ? "15" : "3"} rx="10" />
-            
             {m.boat && (
               <g transform={`translate(${centerX}, ${centerY}) rotate(${rotation}) translate(${-boatBeam/2}, ${-boatLength/2})`} style={{ pointerEvents: 'none' }}>
                 <BoatIcon width={boatBeam} height={boatLength} isBase={m.boat.isBase} />
               </g>
             )}
-
             <g transform={`translate(${centerX}, ${centerY}) rotate(180)`} style={{ pointerEvents: 'none' }}>
               <rect x="-110" y="-50" width="220" height="100" rx="25" fill={pillFill} stroke={pillStroke} strokeWidth="6" />
               <text textAnchor="middle" y="25" className={`text-[65px] font-black tracking-tighter ${textFill}`}>{m.id}</text>
@@ -434,51 +587,28 @@ const MooringMap: React.FC<MooringMapProps> = ({
 
     const piersEndAt = PIER_Y_OFFSET + slotStartY + fixedHeight;
     const hammerConcreteWidth = 900; 
-
     const headBoatLength = hammerConcreteWidth - 100;
     const headBoatBeam = 240;
 
     return (
       <g key={zone} transform={`translate(${xOffset}, 0)`}>
         <rect x="0" y={PIER_Y_OFFSET} width={walkwayWidth} height={fixedHeight + hammerHeight + slotStartY} fill="#1e293b" rx="10" />
-        
         <g transform={`translate(${walkwayWidth/2}, ${PIER_Y_OFFSET + 250}) rotate(180)`}>
           <rect x="-350" y="-120" width="700" height="200" fill="#1e293b" stroke="#ffffff" strokeWidth="8" rx="40" />
           <text textAnchor="middle" y="30" className="text-[145px] font-black fill-white uppercase tracking-tighter">{zone}</text>
         </g>
-        
         {leftSide.map((m, i) => renderSlot(m, i, false))}
         {rightSide.map((m, i) => renderSlot(m, i, true))}
-        
         {headMooring && (
           <g transform={`translate(${walkwayWidth/2}, ${piersEndAt})`}>
-             <rect 
-               x={-hammerConcreteWidth / 2} 
-               y={-50} 
-               width={hammerConcreteWidth} 
-               height={hammerHeight + 50} 
-               fill="#1e293b" 
-               rx="10" 
-             />
-
+             <rect x={-hammerConcreteWidth / 2} y={-50} width={hammerConcreteWidth} height={hammerHeight + 50} fill="#1e293b" rx="10" />
              <g onClick={(e) => { e.stopPropagation(); onSelectMooring(headMooring); }} className="cursor-pointer">
-              <rect 
-                x={-hammerConcreteWidth / 2} 
-                y={hammerHeight + 20} 
-                width={hammerConcreteWidth} 
-                height={280} 
-                fill={selectedId === headMooring.id ? "rgba(255,255,255,0.4)" : (headMooring.status === MooringStatus.RESERVED ? "rgba(251, 191, 36, 0.6)" : "rgba(255,255,255,0.15)")} 
-                stroke={selectedId === headMooring.id ? "white" : "rgba(255,255,255,0.3)"} 
-                strokeWidth={10} 
-                rx="40" 
-              />
-              
+              <rect x={-hammerConcreteWidth / 2} y={hammerHeight + 20} width={hammerConcreteWidth} height={280} fill={selectedId === headMooring.id ? "rgba(255,255,255,0.4)" : (headMooring.status === MooringStatus.RESERVED ? "rgba(251, 191, 36, 0.6)" : "rgba(255,255,255,0.15)")} stroke={selectedId === headMooring.id ? "white" : "rgba(255,255,255,0.3)"} strokeWidth={10} rx="40" />
               {headMooring.boat && (
                 <g transform={`translate(0, ${hammerHeight + 20 + 140}) rotate(90) translate(${-headBoatBeam/2}, ${-headBoatLength/2})`} style={{ pointerEvents: 'none' }}>
                    <BoatIcon width={headBoatBeam} height={headBoatLength} isBase={headMooring.boat.isBase} />
                 </g>
               )}
-              
               <g transform={`translate(0, ${hammerHeight + 160}) rotate(180)`} style={{ pointerEvents: 'none' }}>
                  <rect x="-140" y="-50" width="280" height="100" rx="25" fill="rgba(255,255,255,0.95)" stroke="#1e293b" strokeWidth="6" />
                 <text textAnchor="middle" y="25" className="text-[70px] font-black tracking-tighter fill-slate-900">{headMooring.id}</text>
@@ -536,6 +666,17 @@ const MooringMap: React.FC<MooringMapProps> = ({
             {renderPier('SUR', PIER_OFFSETS.SUR)}
             {renderPier('CENTRAL', PIER_OFFSETS.CENTRAL)}
             {renderPier('NORTE', PIER_OFFSETS.NORTE)}
+
+            {/* CABO: Dibujado ANTES del marinero y barco para que quede debajo de las manos si es necesario, o encima del agua */}
+            {ropePath && (
+               <path d={ropePath} stroke="#d97706" strokeWidth="18" fill="none" strokeLinecap="round" />
+            )}
+
+            {sailorPos && (
+               <g transform={`translate(${sailorPos.x}, ${sailorPos.y + sailorPos.bob}) rotate(${sailorPos.rotation})`}>
+                  <SailorIcon tick={sailorPos.tick} isCatching={sailorPos.isCatching} isWaving={sailorPos.isWaving} />
+               </g>
+            )}
 
             {animPos && transitingBoat && (
               <g transform={`translate(${animPos.x}, ${animPos.y}) rotate(${animPos.rotation})`}>

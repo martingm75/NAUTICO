@@ -91,11 +91,7 @@ const App: React.FC = () => {
   }, [moorings]);
 
   const handleUpdateMooring = (updated: Mooring) => {
-    // 1. Actualizar el estado visual de los amarres
-    setMoorings(prev => prev.map(m => m.id === updated.id ? updated : m));
-    
-    // 2. GUARDAR INMEDIATAMENTE EN LA BASE DE DATOS (REGISTRO)
-    // Si el amarre actualizado tiene un barco, actualizamos o creamos su ficha en el registro global
+    // 1. Gestionar el Registro de Barcos inmediatamente
     if (updated.boat) {
       setBoatRegistry(prev => {
         const boatIndex = prev.findIndex(b => b.id === updated.boat!.id);
@@ -111,6 +107,32 @@ const App: React.FC = () => {
       });
     }
 
+    // 2. Comprobar si es una NUEVA asignación (Disponible -> Ocupado) para animar
+    const oldMooring = moorings.find(m => m.id === updated.id);
+    const isNewArrival = oldMooring?.status === MooringStatus.AVAILABLE && updated.status === MooringStatus.OCCUPIED && updated.boat;
+
+    if (isNewArrival && updated.boat) {
+      // Configuramos la animación de entrada
+      setTransitingBoat({
+        boat: updated.boat,
+        sourceId: 'ENTRY', // Código especial para entrada desde el mar
+        targetId: updated.id
+      });
+      
+      // Cambiamos a la pestaña de mapa para ver la animación
+      setActiveTab('map');
+      
+      // Cerramos el editor para despejar la vista
+      setSelectedMooring(null);
+      
+      // IMPORTANTE: No actualizamos el estado del amarre a OCUPADO todavía.
+      // Esperamos a que la animación termine (handleAnimationComplete).
+      return; 
+    }
+
+    // 3. Si no es animación, actualización normal
+    setMoorings(prev => prev.map(m => m.id === updated.id ? updated : m));
+    
     if (selectedMooring?.id === updated.id) {
       setSelectedMooring(updated);
     }
@@ -134,6 +156,8 @@ const App: React.FC = () => {
   };
 
   const handleDeparture = (mooringId: string, boatData?: Boat) => {
+    console.log("Iniciando proceso de salida:", mooringId, boatData);
+
     // Buscar el amarre actual en el estado (la fuente de la verdad)
     const mooring = moorings.find(m => m.id === mooringId);
     
@@ -142,13 +166,13 @@ const App: React.FC = () => {
 
     // Validación de seguridad
     if (!mooring || !boatToDepart) {
-      console.error("Intento de zarpar desde un amarre vacío o sin datos de barco");
+      console.error("Intento de zarpar desde un amarre vacío o sin datos de barco", { mooring, boatToDepart });
       return;
     }
 
     // 1. Configurar animación de salida
     setTransitingBoat({
-      boat: boatToDepart,
+      boat: { ...boatToDepart }, // Copia segura del objeto
       sourceId: mooringId,
       targetId: 'EXIT'
     });
@@ -185,13 +209,21 @@ const App: React.FC = () => {
       return;
     }
 
+    // Si el barco ha llegado a un amarre (sea por traslado o por entrada ENTRY), ocupamos la plaza
     setMoorings(prev => prev.map(m => 
       m.id === targetId ? { ...m, boat: boat, status: MooringStatus.OCCUPIED } : m
     ));
     setTransitingBoat(null);
     
+    // Seleccionamos el amarre para ver los detalles
     const newMooring = moorings.find(m => m.id === targetId);
-    if (newMooring) setSelectedMooring({ ...newMooring, boat, status: MooringStatus.OCCUPIED });
+    // Necesitamos reconstruir el objeto mooring porque el estado 'moorings' aún no se ha renderizado con el cambio
+    if (newMooring) {
+      // Pequeño delay para asegurar que la transición visual es suave
+      setTimeout(() => {
+         setSelectedMooring({ ...newMooring, boat, status: MooringStatus.OCCUPIED });
+      }, 100);
+    }
   };
 
   // Función para asignar barco desde el registro a un amarre
@@ -207,25 +239,19 @@ const App: React.FC = () => {
     // Actualizamos el registro también para reflejar el cambio de estado (si era dry dock)
     setBoatRegistry(prev => prev.map(b => b.id === boat.id ? boatToDock : b));
 
-    setMoorings(prev => prev.map(m => {
-      if (m.id === mooringId) {
-        return {
-          ...m,
-          status: MooringStatus.OCCUPIED,
-          boat: boatToDock
-        };
-      }
-      return m;
-    }));
+    // Iniciar Animación de Entrada desde el Mar
+    setTransitingBoat({
+      boat: boatToDock,
+      sourceId: 'ENTRY',
+      targetId: mooringId
+    });
 
-    // Cambiar a vista de mapa para ver el resultado
+    // Cambiar a vista de mapa para ver la animación
     setActiveTab('map');
     
-    // Seleccionar el amarre actualizado
-    setTimeout(() => {
-      const targetM = { ...moorings.find(m => m.id === mooringId)!, status: MooringStatus.OCCUPIED, boat: boatToDock };
-      setSelectedMooring(targetM);
-    }, 100);
+    // NO actualizamos setMoorings aquí. Se hará en handleAnimationComplete cuando el barco llegue.
+    // Deseleccionar cualquier cosa activa
+    setSelectedMooring(null);
   };
 
   const handleAiAsk = async () => {

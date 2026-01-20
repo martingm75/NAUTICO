@@ -84,11 +84,14 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
     onMoveBoat(mooring.id, target.id);
   };
 
-  const handleDepartClick = () => {
+  const handleDepartClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     // Si el barco existe en el editor (incluso si no está guardado en el estado global), permitimos zarpar.
     if (!editedMooring.boat) return;
     
-    if (confirm(`¿Confirmar la salida de "${editedMooring.boat.name || 'la embarcación'}"? Pasará al registro histórico.`)) {
+    if (window.confirm(`¿Confirmar la salida de "${editedMooring.boat.name || 'la embarcación'}"? Pasará al registro histórico.`)) {
       onDepart(mooring.id, editedMooring.boat);
     }
   };
@@ -270,8 +273,9 @@ const MooringEditor: React.FC<MooringEditorProps> = ({ mooring, allMoorings, onU
         <div className="flex gap-2 pt-4 sticky bottom-0 bg-white border-t border-slate-100 z-50 pb-2">
           {(editedMooring.status === MooringStatus.OCCUPIED || editedMooring.status === MooringStatus.RESERVED) && editedMooring.boat && (
             <button 
+              type="button"
               onClick={handleDepartClick} 
-              className="px-4 py-3 bg-indigo-500 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-200 active:scale-95"
+              className="px-4 py-3 bg-indigo-500 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-indigo-600 transition-all shadow-lg shadow-indigo-200 active:scale-95 cursor-pointer z-50"
               title="El barco zarpa y libera la plaza"
             >
               <Ship size={18} /> ZARPAR
