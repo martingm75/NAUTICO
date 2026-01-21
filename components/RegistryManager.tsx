@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Boat, Mooring, MooringStatus } from '../types';
 import { FLAG_ISO_MAP } from '../constants';
-import { Search, Plus, User, Ruler, Ship, MapPin, Save, X, Trash2, Anchor, ArrowRight, History, Compass, CheckCircle2, Container, Waves, Map, AlertTriangle, Calendar, Clock, Phone, Mail, Globe, CreditCard, FileText } from 'lucide-react';
+import { Search, Plus, User, Ruler, Ship, Save, X, Trash2, Anchor, History, Compass, Container, Waves, Calendar, Clock, Phone, Mail, CreditCard, FileText, Snowflake, Wrench, RefreshCw } from 'lucide-react';
 import PrintableMap from './PrintableMap';
 import DeclarationForm from './DeclarationForm';
 
@@ -15,7 +15,7 @@ interface RegistryManagerProps {
   initialTab?: RegistryTab;
 }
 
-type RegistryTab = 'base_current' | 'base_past' | 'transit' | 'dry_dock';
+type RegistryTab = 'base_current' | 'base_past' | 'transit_current' | 'transit_past' | 'dry_dock';
 
 const RegistryManager: React.FC<RegistryManagerProps> = ({ 
   registry, 
@@ -29,7 +29,6 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
   const [activeTab, setActiveTab] = useState<RegistryTab>(initialTab || 'base_current');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBoat, setEditingBoat] = useState<Boat | null>(null);
-  const [assigningBoat, setAssigningBoat] = useState<Boat | null>(null);
   const [showPrintMap, setShowPrintMap] = useState(false);
   const [boatForDeclaration, setBoatForDeclaration] = useState<Boat | null>(null);
 
@@ -40,7 +39,7 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
   const [formData, setFormData] = useState<Boat>({
     id: '', name: '', owner: '', phone: '', email: '', length: 0, beam: 0, registration: '',
     flag: 'España', flagCode: 'es', portOfRegistry: '', skipperId: '', nationality: '',
-    arrivalDate: '', departureDate: '', isBase: false, inDryDock: false, passengers: []
+    arrivalDate: '', departureDate: '', isBase: false, inDryDock: false, passengers: [], history: []
   });
 
   const filteredRegistry = useMemo(() => {
@@ -52,10 +51,15 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
 
     return textFiltered.filter(boat => {
       const isActive = activeBoatIds.includes(boat.id);
+      
       if (activeTab === 'dry_dock') return boat.inDryDock;
+      
       if (activeTab === 'base_current') return boat.isBase && isActive && !boat.inDryDock;
       if (activeTab === 'base_past') return boat.isBase && !isActive && !boat.inDryDock;
-      if (activeTab === 'transit') return !boat.isBase && !boat.inDryDock;
+      
+      if (activeTab === 'transit_current') return !boat.isBase && isActive && !boat.inDryDock;
+      if (activeTab === 'transit_past') return !boat.isBase && !isActive && !boat.inDryDock;
+      
       return true;
     });
   }, [registry, searchTerm, activeTab, activeBoatIds]);
@@ -67,7 +71,8 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
     return {
       base_current: base.filter(b => activeBoatIds.includes(b.id)).length,
       base_past: base.filter(b => !activeBoatIds.includes(b.id)).length,
-      transit: transit.length,
+      transit_current: transit.filter(b => activeBoatIds.includes(b.id)).length,
+      transit_past: transit.filter(b => !activeBoatIds.includes(b.id)).length,
       dry_dock: dryDock.length
     };
   }, [registry, activeBoatIds]);
@@ -82,7 +87,7 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
         id: Date.now().toString(), name: '', owner: '', phone: '', email: '', length: 0, beam: 0, registration: '',
         flag: 'España', flagCode: 'es', portOfRegistry: '', skipperId: '', nationality: '',
         arrivalDate: new Date().toISOString().split('T')[0], departureDate: '', isBase: activeTab.includes('base'), inDryDock: activeTab === 'dry_dock',
-        passengers: []
+        passengers: [], history: []
       });
     }
     setIsModalOpen(true);
@@ -116,6 +121,21 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
     setBoatForDeclaration(null);
   };
 
+  // Función wrapper para botadura inteligente
+  const handleLaunch = (boat: Boat) => {
+      // Si tiene titular y está libre/reservada para él, pasar el ID directamente
+      // App.tsx manejará la lógica, pero aquí podemos pre-validar
+      if (boat.titularMooringId) {
+          const m = moorings.find(m => m.id === boat.titularMooringId);
+          if (m && (m.status === MooringStatus.AVAILABLE || (m.status === MooringStatus.RESERVED && m.reservation?.relatedBoatId === boat.id))) {
+              onAssignToMooring(boat, boat.titularMooringId);
+              return;
+          }
+      }
+      // Si no, sugerir al usuario que use la vista de mapa
+      alert("Por favor, seleccione una plaza libre en la vista de Mapa para asignar este barco.");
+  };
+
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 h-full flex flex-col overflow-hidden">
       {showPrintMap && <PrintableMap moorings={moorings} onClose={() => setShowPrintMap(false)} />}
@@ -140,7 +160,8 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
         {[
           { id: 'base_current', label: 'Base Actual', icon: Anchor, color: 'emerald' },
           { id: 'base_past', label: 'Histórico Base', icon: History, color: 'slate' },
-          { id: 'transit', label: 'Tránsito / Visitas', icon: Compass, color: 'amber' },
+          { id: 'transit_current', label: 'Tránsito Actual', icon: Compass, color: 'amber' },
+          { id: 'transit_past', label: 'Histórico Tránsito', icon: History, color: 'orange' },
           { id: 'dry_dock', label: 'Marina Seca', icon: Container, color: 'indigo' }
         ].map(tab => (
           <button
@@ -169,11 +190,29 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
             const isActive = activeBoatIds.includes(boat.id);
             return (
               <div key={boat.id} className="group bg-white border border-slate-200 rounded-2xl p-5 hover:shadow-2xl hover:-translate-y-1 transition-all relative overflow-hidden">
-                <div className={`absolute top-0 right-0 p-1 px-2 text-[8px] font-black uppercase ${isActive ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                  {isActive ? 'Amarrado' : 'Fuera'}
+                <div className={`absolute top-0 right-0 p-1 px-2 text-[8px] font-black uppercase ${
+                  boat.inDryDock 
+                    ? 'bg-indigo-100 text-indigo-700' 
+                    : isActive 
+                      ? 'bg-emerald-500 text-white' 
+                      : 'bg-slate-200 text-slate-500'
+                }`}>
+                  {boat.inDryDock ? 'EN SECO' : (isActive ? 'AMARRADO' : 'FUERA')}
                 </div>
                 
-                <div className="flex justify-between items-start mb-4">
+                {/* ETIQUETA HIBERNACIÓN / MANTENIMIENTO */}
+                {boat.inDryDock && (
+                  <div className={`absolute top-0 left-0 p-1 px-2 text-[8px] font-black uppercase flex items-center gap-1 ${
+                    boat.maintenanceReason === 'Hibernación' 
+                      ? 'bg-sky-100 text-sky-700' 
+                      : 'bg-orange-100 text-orange-700'
+                  }`}>
+                    {boat.maintenanceReason === 'Hibernación' ? <Snowflake size={10} /> : <Wrench size={10} />}
+                    {boat.maintenanceReason || 'MANTENIMIENTO'}
+                  </div>
+                )}
+                
+                <div className="flex justify-between items-start mb-4 mt-2">
                   <div className="flex items-center gap-2">
                     {boat.flagCode && <img src={`https://flagcdn.com/w40/${boat.flagCode.toLowerCase()}.png`} className="w-7 h-4.5 shadow-sm rounded-sm object-cover" alt={boat.flag} />}
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{boat.flag}</span>
@@ -208,10 +247,16 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                   </div>
                 </div>
 
-                {!isActive && (
-                  <button onClick={() => setAssigningBoat(boat)} className="w-full mt-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase hover:bg-black transition-all flex items-center justify-center gap-1 shadow-lg shadow-slate-200">
-                    <MapPin size={12} /> Asignar Amarre
+                {!isActive && !boat.inDryDock && (
+                  <button onClick={() => handleLaunch(boat)} className="w-full mt-4 py-2 bg-slate-900 text-white rounded-xl text-[9px] font-black uppercase hover:bg-black transition-all flex items-center justify-center gap-1 shadow-lg shadow-slate-200">
+                    <RefreshCw size={12} className="mr-1"/> Reasignar / Nueva Estancia
                   </button>
+                )}
+                
+                {boat.inDryDock && (
+                   <button onClick={() => handleLaunch(boat)} className="w-full mt-4 py-2 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase hover:bg-indigo-700 transition-all flex items-center justify-center gap-1 shadow-lg shadow-indigo-200">
+                     <Waves size={12} /> Botar al Agua
+                   </button>
                 )}
               </div>
             );
@@ -253,8 +298,22 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                         </select>
                       </div>
                       <div className="flex items-end justify-center pb-1">
-                        {formData.flagCode && <img src={`https://flagcdn.com/w80/${formData.flagCode.toLowerCase()}.png`} className="w-12 h-8 rounded shadow-sm border" alt="Flag" />}
+                        {formData.flagCode && <img src={`https://flagcdn.com/w40/${formData.flagCode.toLowerCase()}.png`} className="w-12 h-8 rounded shadow-sm border" alt="Flag" />}
                       </div>
+                    </div>
+                    
+                    {/* TOGGLE MARINA SECA */}
+                    <div className="pt-2">
+                       <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <input type="checkbox" name="inDryDock" checked={formData.inDryDock} onChange={handleChange} className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" />
+                          <span className="text-[10px] font-black text-slate-600 uppercase">En Marina Seca</span>
+                       </label>
+                    </div>
+                    
+                    {/* PLAZA TITULAR */}
+                    <div>
+                       <label className="text-[9px] font-black text-slate-500 uppercase">Plaza Titular (Opcional)</label>
+                       <input name="titularMooringId" value={formData.titularMooringId || ''} onChange={handleChange} placeholder="Ej: P1/2B" className="w-full mt-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs font-bold outline-none" />
                     </div>
                   </div>
                 </div>
@@ -292,13 +351,45 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                     <input type="number" name="beam" value={formData.beam} onChange={handleChange} className="w-full mt-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold" />
                   </div>
                   <div>
-                    <label className="text-[9px] font-black text-slate-500 uppercase">Llegada</label>
+                    <label className="text-[9px] font-black text-slate-500 uppercase">Llegada Actual</label>
                     <input type="date" name="arrivalDate" value={formData.arrivalDate} onChange={handleChange} className="w-full mt-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold" />
                   </div>
                   <div>
                     <label className="text-[9px] font-black text-slate-500 uppercase">Salida</label>
                     <input type="date" name="departureDate" value={formData.departureDate} onChange={handleChange} className="w-full mt-1 bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-bold" />
                   </div>
+                </div>
+
+                {/* HISTORIAL DE ESTANCIAS */}
+                <div className="col-span-2">
+                  <div className="flex items-center gap-2 border-b border-slate-100 pb-2 mb-3">
+                    <History size={16} className="text-amber-500" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Historial de Estancias</span>
+                  </div>
+                  {formData.history && formData.history.length > 0 ? (
+                    <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-100">
+                          <tr>
+                             <th className="p-3 text-[9px] font-black uppercase text-slate-500">Llegada</th>
+                             <th className="p-3 text-[9px] font-black uppercase text-slate-500">Salida</th>
+                             <th className="p-3 text-[9px] font-black uppercase text-slate-500">Amarre</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {formData.history.map((stay, idx) => (
+                            <tr key={idx}>
+                              <td className="p-3 text-[10px] font-bold text-slate-700">{stay.arrivalDate}</td>
+                              <td className="p-3 text-[10px] font-bold text-slate-700">{stay.departureDate}</td>
+                              <td className="p-3 text-[10px] font-bold text-slate-700">{stay.mooringId || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-center text-xs text-slate-400 italic py-4 border border-dashed border-slate-200 rounded-xl">Sin historial registrado</p>
+                  )}
                 </div>
               </div>
               

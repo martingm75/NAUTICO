@@ -1,7 +1,7 @@
 
 import React from 'react';
-import { Mooring, PierZone } from '../types';
-import { Printer, X, Download } from 'lucide-react';
+import { Mooring, PierZone, MooringStatus } from '../types';
+import { Printer, X } from 'lucide-react';
 
 interface PrintableMapProps {
   moorings: Mooring[];
@@ -9,104 +9,203 @@ interface PrintableMapProps {
 }
 
 const PrintableMap: React.FC<PrintableMapProps> = ({ moorings, onClose }) => {
-  // Configuración del dibujo
-  const SVG_WIDTH = 1123; // A4 Landscape aprox width en pixels (96dpi)
-  const SVG_HEIGHT = 794; // A4 Landscape height
-  const PIER_SPACING = 350;
-  const START_X = 200;
-  const START_Y = 100;
-  const SLOT_HEIGHT = 28; // Altura de cada plaza en el esquema
-  const PIER_WIDTH = 40;  // Ancho del pasillo central
+  // --- CONFIGURACIÓN GEOMÉTRICA (EXACTA A MOORINGMAP.TSX) ---
+  const SVG_WIDTH = 6500; 
+  const SVG_HEIGHT = 6000; 
+  
+  const walkwayWidth = 140; 
+  const fingerWidth = 20; 
+  const hammerHeight = 150; 
+  const fixedHeight = 3600;
+  const slotStartY = 450;
+  const PIER_Y_OFFSET = 500; 
 
-  // Agrupar amarres
-  const getPierData = (zone: PierZone) => {
-    const raw = moorings.filter(m => m.zone === zone);
-    const head = raw.find(m => m.id.includes('G') || m.id === 'P2/26C');
-    
-    // Separar pares e impares para simular lados (como en el mapa interactivo)
-    // Asumimos: Impares Izquierda, Pares Derecha (o viceversa según constante, aquí visual)
-    const leftSide = raw.filter(m => parseInt(m.id.split('/')[1]) % 2 !== 0 && m !== head).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
-    const rightSide = raw.filter(m => parseInt(m.id.split('/')[1]) % 2 === 0 && m !== head).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
-
-    return { head, leftSide, rightSide };
+  const PIER_OFFSETS = {
+    'SUR': 1000, 
+    'CENTRAL': 3000,
+    'NORTE': 5000
   };
 
-  const renderPierColumn = (zone: PierZone, xOffset: number, title: string) => {
-    const { head, leftSide, rightSide } = getPierData(zone);
-    const maxRows = Math.max(leftSide.length, rightSide.length);
-    const pierLength = maxRows * SLOT_HEIGHT + 50;
-    
-    // Ajuste dinámico del ancho de la caja del título para "MARTILLO X"
-    const titleBoxWidth = 260;
-    const titleBoxX = (PIER_WIDTH / 2) - (titleBoxWidth / 2);
-
-    return (
-      <g transform={`translate(${xOffset}, ${START_Y})`}>
-        {/* Título del Pantalán (Martillo) */}
-        <rect x={titleBoxX} y={-60} width={titleBoxWidth} height={40} fill="none" stroke="black" strokeWidth="2" />
-        <text x={PIER_WIDTH/2} y={-35} textAnchor="middle" fontSize="20" fontWeight="bold" fontFamily="sans-serif">{title}</text>
-
-        {/* Pasarela Central */}
-        <rect x={0} y={0} width={PIER_WIDTH} height={pierLength} fill="none" stroke="black" strokeWidth="2" />
-
-        {/* Plazas Izquierda */}
-        {leftSide.map((m, i) => {
-          const y = i * SLOT_HEIGHT;
-          return (
-            <g key={m.id} transform={`translate(0, ${y})`}>
-              {/* Finger outline shape - path simulando el "notch" */}
-              <path d={`M 0 0 L -80 0 L -90 ${SLOT_HEIGHT/2} L -80 ${SLOT_HEIGHT} L 0 ${SLOT_HEIGHT}`} fill="none" stroke="black" strokeWidth="1.5" />
-              {/* Texto: Nombre barco o ID */}
-              <text x={-5} y={SLOT_HEIGHT/2 + 4} textAnchor="end" fontSize="10" fontFamily="sans-serif" fontWeight={m.boat ? "bold" : "normal"}>
-                {m.boat ? (m.boat.name.length > 12 ? m.boat.name.substring(0, 12) + '.' : m.boat.name) : m.id}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Plazas Derecha */}
-        {rightSide.map((m, i) => {
-          const y = i * SLOT_HEIGHT;
-          return (
-            <g key={m.id} transform={`translate(${PIER_WIDTH}, ${y})`}>
-              {/* Finger outline shape */}
-              <path d={`M 0 0 L 80 0 L 90 ${SLOT_HEIGHT/2} L 80 ${SLOT_HEIGHT} L 0 ${SLOT_HEIGHT}`} fill="none" stroke="black" strokeWidth="1.5" />
-              {/* Texto */}
-              <text x={5} y={SLOT_HEIGHT/2 + 4} textAnchor="start" fontSize="10" fontFamily="sans-serif" fontWeight={m.boat ? "bold" : "normal"}>
-                {m.boat ? (m.boat.name.length > 12 ? m.boat.name.substring(0, 12) + '.' : m.boat.name) : m.id}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Cabecera */}
-        {head && (
-          <g transform={`translate(${PIER_WIDTH/2}, ${pierLength})`}>
-            <rect x={-100} y={0} width={200} height={40} fill="none" stroke="black" strokeWidth="2" />
-            <text x={0} y={25} textAnchor="middle" fontSize="12" fontWeight="bold" fontFamily="sans-serif">
-              {head.boat ? head.boat.name : head.id}
-            </text>
-          </g>
-        )}
-      </g>
-    );
+  const isHeadMooring = (id: string) => {
+    return id.endsWith('G') || id === 'P2/26C' || id.includes('P3/35');
   };
 
   const handlePrint = () => {
     window.print();
   };
 
+  // --- RENDERIZADO DE PANTALÁN ---
+  const renderPier = (zone: PierZone, xOffset: number) => {
+    const pierMoorings = moorings.filter(m => m.zone === zone);
+    const headMooring = pierMoorings.find(m => isHeadMooring(m.id));
+    const sideMoorings = pierMoorings.filter(m => m.id !== headMooring?.id);
+    
+    // Lógica de dedos compartidos (Finger logic)
+    const prepareSide = (items: Mooring[]) => {
+      let fingerState = true; 
+      return items.map((m) => {
+        let drawTop = fingerState;
+        let drawBottom = false;
+
+        if (m.customFinger === 'TOP') { drawTop = true; drawBottom = false; } 
+        else if (m.customFinger === 'BOTTOM') { drawTop = false; drawBottom = true; } 
+        else if (m.customFinger === 'BOTH') { drawTop = true; drawBottom = true; } 
+        else if (m.customFinger === 'NONE') { drawTop = false; drawBottom = false; } 
+        else {
+          if (m.isSingle) { drawTop = true; fingerState = true; } 
+          else {
+            if (fingerState) { fingerState = false; } else { fingerState = true; }
+          }
+        }
+        return { ...m, drawFingerTop: drawTop, drawFingerBottom: drawBottom };
+      });
+    };
+
+    const leftRaw = sideMoorings.filter(m => parseInt(m.id.split('/')[1]) % 2 !== 0).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
+    const rightRaw = sideMoorings.filter(m => parseInt(m.id.split('/')[1]) % 2 === 0).sort((a, b) => parseInt(a.id.split('/')[1]) - parseInt(b.id.split('/')[1]));
+    
+    const leftSide = prepareSide(leftRaw);
+    const rightSide = prepareSide(rightRaw);
+    
+    const leftSlotHeight = leftSide.length > 0 ? fixedHeight / leftSide.length : 0;
+    const rightSlotHeight = rightSide.length > 0 ? fixedHeight / rightSide.length : 0;
+
+    const renderSlot = (item: Mooring & { drawFingerTop: boolean; drawFingerBottom: boolean }, i: number, isRight: boolean) => {
+      const m = item;
+      const slotHeight = isRight ? rightSlotHeight : leftSlotHeight;
+      const y = PIER_Y_OFFSET + slotStartY + (i * slotHeight);
+      
+      let w = 400; 
+      if (m.id.includes('A')) w = 260;
+      else if (m.id.includes('B')) w = 320;
+      else if (m.id.includes('C')) w = 400;
+      else if (m.id.includes('D')) w = 500;
+      
+      const h = slotHeight - 10; 
+      
+      // Coordenadas locales
+      const xWater = isRight ? walkwayWidth : -w;
+      const fingerLen = w * 0.9;
+      const fingerX = isRight ? walkwayWidth : -fingerLen;
+      const fingerYTop = y - 10; 
+      const fingerYBottom = y + h; 
+      
+      const centerX = xWater + w / 2;
+      const centerY = y + h / 2;
+
+      // ESTILOS PARA IMPRESIÓN (Blanco y Negro)
+      const isOccupied = m.status === MooringStatus.OCCUPIED || m.status === MooringStatus.RESERVED;
+      const strokeColor = "black";
+      const strokeWidth = "3";
+      // Relleno sutil si está ocupado para diferenciar visualmente en papel
+      const fill = isOccupied ? "#f1f5f9" : "none"; 
+      
+      // TEXTO
+      const label = m.boat ? m.boat.name : m.id;
+      
+      // Rotamos el texto 180 grados para que, al estar el mapa rotado 180, el texto quede derecho (0 grados visuales)
+      const textRotation = 180; 
+
+      return (
+        <g key={m.id}>
+          {/* Fingers */}
+          {item.drawFingerTop && <rect x={fingerX} y={fingerYTop} width={fingerLen} height={fingerWidth} fill="black" />}
+          {item.drawFingerBottom && <rect x={fingerX} y={fingerYBottom} width={fingerLen} height={fingerWidth} fill="black" />}
+          
+          {/* Plaza */}
+          <rect x={xWater} y={y} width={w} height={h} fill={fill} stroke={strokeColor} strokeWidth={strokeWidth} />
+          
+          {/* Texto (Nombre Barco o ID Plaza) */}
+          <g transform={`translate(${centerX}, ${centerY})`}>
+             <text 
+                transform={`rotate(${textRotation})`}
+                textAnchor="middle" 
+                dominantBaseline="middle" 
+                fontSize="55" 
+                fontWeight="bold" 
+                fill="black"
+                fontFamily="sans-serif"
+             >
+                {label.length > 15 ? label.substring(0, 15) + '.' : label}
+             </text>
+             {/* Si hay barco, mostramos dimensiones pequeñas debajo */}
+             {m.boat && (
+                 <text 
+                    transform={`rotate(${textRotation}) translate(0, -40)`} 
+                    textAnchor="middle" 
+                    dominantBaseline="middle" 
+                    fontSize="30" 
+                    fill="#64748b"
+                    fontFamily="sans-serif"
+                 >
+                    {m.boat.length}x{m.boat.beam}m
+                 </text>
+             )}
+          </g>
+        </g>
+      );
+    };
+
+    const piersEndAt = PIER_Y_OFFSET + slotStartY + fixedHeight;
+    const hammerConcreteWidth = 900; 
+
+    return (
+      <g key={zone} transform={`translate(${xOffset}, 0)`}>
+        {/* Pasillo Principal */}
+        <rect x="0" y={PIER_Y_OFFSET} width={walkwayWidth} height={fixedHeight + hammerHeight + slotStartY} fill="none" stroke="black" strokeWidth="6" />
+        
+        {/* Etiqueta del Pantalán */}
+        <g transform={`translate(${walkwayWidth/2}, ${PIER_Y_OFFSET + 250}) rotate(180)`}>
+          <text textAnchor="middle" y="30" fontSize="120" fontWeight="900" fill="black" letterSpacing="10">{zone}</text>
+        </g>
+
+        {/* Plazas */}
+        {leftSide.map((m, i) => renderSlot(m, i, false))}
+        {rightSide.map((m, i) => renderSlot(m, i, true))}
+        
+        {/* Cabecera (Martillo) */}
+        {headMooring && (
+          <g transform={`translate(${walkwayWidth/2}, ${piersEndAt})`}>
+             <rect x={-hammerConcreteWidth / 2} y={-50} width={hammerConcreteWidth} height={hammerHeight + 50} fill="none" stroke="black" strokeWidth="6" />
+             <g transform="rotate(180)">
+              <rect 
+                x={-hammerConcreteWidth / 2} 
+                y={-(hammerHeight + 20 + 280)} 
+                width={hammerConcreteWidth} 
+                height={280} 
+                fill={headMooring.boat ? "#f1f5f9" : "none"} 
+                stroke="black" 
+                strokeWidth="6" 
+              />
+              <text 
+                x={0} 
+                y={-(hammerHeight + 20 + 140)} 
+                textAnchor="middle" 
+                dominantBaseline="middle" 
+                fontSize="100" 
+                fontWeight="bold" 
+                fill="black"
+              >
+                {headMooring.boat ? headMooring.boat.name : headMooring.id}
+              </text>
+            </g>
+          </g>
+        )}
+      </g>
+    );
+  };
+
   return (
-    <div className="fixed inset-0 bg-white z-[100] overflow-auto flex flex-col items-center">
-      {/* Controls - Hidden when printing */}
-      <div className="w-full bg-slate-900 text-white p-4 flex justify-between items-center print:hidden sticky top-0 shadow-xl">
+    <div className="fixed inset-0 bg-white z-[100] overflow-auto flex flex-col items-center font-sans">
+      {/* Barra de Herramientas (No sale en impresión) */}
+      <div className="w-full bg-slate-900 text-white p-4 flex justify-between items-center print:hidden sticky top-0 shadow-xl z-50">
         <div>
-          <h2 className="text-lg font-bold">Plano de Ocupación Actual</h2>
-          <p className="text-xs text-slate-400">Vista esquemática para impresión</p>
+          <h2 className="text-lg font-bold">Plano Técnico de Ocupación</h2>
+          <p className="text-xs text-slate-400">Esquema B/N optimizado para impresora</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={handlePrint} className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 px-4 py-2 rounded-lg font-bold transition-colors">
-            <Printer size={18} /> Imprimir / PDF
+          <button onClick={handlePrint} className="flex items-center gap-2 bg-sky-600 hover:bg-sky-700 px-4 py-2 rounded-lg font-bold transition-colors shadow-lg active:scale-95">
+            <Printer size={18} /> Imprimir
           </button>
           <button onClick={onClose} className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded-lg font-bold transition-colors">
             <X size={18} /> Cerrar
@@ -114,29 +213,45 @@ const PrintableMap: React.FC<PrintableMapProps> = ({ moorings, onClose }) => {
         </div>
       </div>
 
-      {/* Printable Area */}
-      <div className="bg-white p-8 print:p-0 w-full max-w-[1200px] flex-1 flex flex-col items-center">
-        <div className="print:w-full w-full border border-slate-200 print:border-none shadow-2xl print:shadow-none p-10 bg-white">
+      {/* Área Imprimible */}
+      <div className="bg-white p-0 w-full max-w-[297mm] flex flex-col items-center">
+        <div className="w-full h-full p-4">
           
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-black uppercase tracking-tight text-slate-900">CN Camariñas</h1>
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-2">Plano de ubicación de embarcaciones</p>
-            <p className="text-xs text-slate-400 mt-1">Fecha: {new Date().toLocaleDateString()}</p>
+          {/* Cabecera del Documento Impreso */}
+          <div className="flex justify-between items-end border-b-4 border-black pb-4 mb-4">
+            <div>
+               <h1 className="text-4xl font-black uppercase tracking-tighter">CN Camariñas</h1>
+               <p className="text-sm font-bold uppercase tracking-widest mt-1">Plano de ubicación de embarcaciones</p>
+            </div>
+            <div className="text-right">
+               <p className="text-sm font-bold">Fecha: {new Date().toLocaleDateString()}</p>
+               <p className="text-xs text-slate-500">Generado por MarinaPro System</p>
+            </div>
           </div>
 
+          {/* SVG MAPA */}
           <svg 
             viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} 
             width="100%" 
             height="auto"
             preserveAspectRatio="xMidYMid meet"
+            className="border border-slate-200 print:border-none"
           >
-            {renderPierColumn('NORTE', START_X, 'MARTILLO NORTE')}
-            {renderPierColumn('CENTRAL', START_X + PIER_SPACING, 'MARTILLO CENTRAL')}
-            {renderPierColumn('SUR', START_X + (PIER_SPACING * 2), 'MARTILLO SUR')}
+            {/* Rotación 180 grados para que la entrada coincida con la visualización habitual */}
+            <g transform={`rotate(180, ${SVG_WIDTH / 2}, ${SVG_HEIGHT / 2})`}>
+                {renderPier('SUR', PIER_OFFSETS.SUR)}
+                {renderPier('CENTRAL', PIER_OFFSETS.CENTRAL)}
+                {renderPier('NORTE', PIER_OFFSETS.NORTE)}
+            </g>
             
-            {/* Leyenda simple en el mapa */}
-            <g transform={`translate(${SVG_WIDTH - 200}, ${SVG_HEIGHT - 50})`}>
-               <text fontSize="10" fill="#64748b" textAnchor="end">Generado por MarinaPro</text>
+            {/* Leyenda Simple SVG */}
+            <g transform="translate(100, 100)">
+               <rect x="0" y="0" width="1000" height="300" fill="white" stroke="black" strokeWidth="2" />
+               <text x="50" y="80" fontSize="50" fontWeight="bold">LEYENDA:</text>
+               <rect x="50" y="120" width="50" height="50" fill="none" stroke="black" strokeWidth="3" />
+               <text x="120" y="160" fontSize="40">Plaza Libre</text>
+               <rect x="50" y="200" width="50" height="50" fill="#f1f5f9" stroke="black" strokeWidth="3" />
+               <text x="120" y="240" fontSize="40">Ocupada / Reservada</text>
             </g>
           </svg>
 
@@ -147,11 +262,14 @@ const PrintableMap: React.FC<PrintableMapProps> = ({ moorings, onClose }) => {
         @media print {
           @page {
             size: landscape;
-            margin: 0.5cm;
+            margin: 5mm;
           }
           body {
-            background: white;
+            background: white !important;
             -webkit-print-color-adjust: exact;
+          }
+          .print:hidden {
+            display: none !important;
           }
         }
       `}</style>

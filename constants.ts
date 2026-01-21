@@ -1,5 +1,5 @@
 
-import { Mooring, MooringStatus, PierZone, TariffSeason } from './types';
+import { Mooring, MooringStatus, PierZone, TariffSeason, Boat } from './types';
 
 // Mapeo para demostración de banderas iniciales
 const FLAGS = [
@@ -13,7 +13,6 @@ const FLAGS = [
   { name: 'Grecia', code: 'gr' }
 ];
 
-// Listas para datos realistas
 const BOAT_NAMES = [
   'Sea Breeze', 'Galerna', 'Albatros', 'Poseidón', 'Mare Nostrum', 'Eolo', 'Sirena del Mar', 'Orca II', 
   'Nereida', 'Odisea', 'Mar de Fondo', 'Estrella Polar', 'Viento del Sur', 'Libertad', 'Amanecer', 
@@ -57,8 +56,13 @@ const generateMoorings = (): Mooring[] => {
     let isSingle = specialSingles[idBase] ? true : false;
     let customFinger: 'TOP' | 'BOTTOM' | 'BOTH' | 'NONE' | undefined = undefined;
 
-    if (idBase === 'P1/1') { isSingle = true; customFinger = 'TOP'; }
+    // MODIFICADO: P1/1 (P1/1C) ahora saca finger por abajo para usar el "otro"
+    if (idBase === 'P1/1') { isSingle = true; customFinger = 'BOTTOM'; }
+    
     if (idBase === 'P1/2') { isSingle = true; customFinger = 'TOP'; }
+    // P1/3 configurado con finger SOLO ABAJO para que no dibuje finger arriba (que sería el de abajo de P1/1)
+    if (idBase === 'P1/3') { customFinger = 'BOTTOM'; }
+    
     if (idBase === 'P2/1') { isSingle = false; customFinger = 'TOP'; }
     if (idBase === 'P2/3') { customFinger = 'BOTTOM'; }
     if (idBase === 'P2/2') { customFinger = 'BOTTOM'; }
@@ -84,56 +88,126 @@ const generateMoorings = (): Mooring[] => {
       dims = { l: overrideLength, b: overrideBeam };
     }
 
-    // Probabilidades ajustadas para más ocupación y mantenimiento
-    const statusRoll = Math.random();
-    let status = MooringStatus.AVAILABLE;
+    // --- GENERACIÓN DE ESTADOS PARA PRUEBAS ---
     
-    if (statusRoll < 0.60) {
-      status = MooringStatus.OCCUPIED;
-    } else if (statusRoll < 0.70) {
-      status = MooringStatus.RESERVED;
-    } else if (statusRoll < 0.80) { // 10% probabilidad de mantenimiento/hibernación
-      status = MooringStatus.MAINTENANCE;
+    // ESCENARIO 1: Plaza Ocupada Normal
+    // ESCENARIO 2: Plaza Reservada porque el titular está en Mantenimiento/Hibernación
+    // ESCENARIO 3: Plaza Mantenimiento (avería en pantalán)
+    // ESCENARIO 4: Plaza Libre
+
+    let status = MooringStatus.AVAILABLE;
+    let boat: Boat | undefined = undefined;
+    let reservation: Mooring['reservation'] = undefined;
+
+    // Forzamos algunos escenarios específicos para que el usuario pueda probar
+    if (fullId === 'P1/2B') {
+        // CASO: Titular en Hibernación. Plaza RESERVADA.
+        status = MooringStatus.RESERVED;
+        const titularBoatName = "Invernalia One";
+        const titularId = `B-HIB-${globalId}`;
+        
+        // El barco NO está en la plaza (boat = undefined), pero creamos la reserva
+        reservation = {
+            startDate: '2023-11-01',
+            endDate: '2024-04-30',
+            notes: 'Titular en Hibernación',
+            relatedBoatId: titularId,
+            relatedBoatName: titularBoatName,
+            type: 'MAINTENANCE_HOLD'
+        };
+        
+        // IMPORTANTE: Este barco debe existir en el registro (se añadirá en App.tsx logicamente, 
+        // pero aquí simulamos la plaza. El barco "fantasma" se creará al inicializar el registro si no existe).
+        // Para simplificar, en esta demo, adjuntamos el barco como propiedad oculta para que App lo extraiga, 
+        // o confiamos en que boatRegistry se pueble.
+        // Haremos un truco: asignamos un 'boat' temporal aquí que luego App moverá al registro y quitará del amarre.
+        boat = {
+             id: titularId,
+             name: titularBoatName,
+             owner: "Winter Stark",
+             length: 7.5, beam: 2.8,
+             registration: "7ª-BA-2-2020",
+             flag: 'Reino Unido', flagCode: 'gb',
+             isBase: true,
+             inDryDock: true, // ESTÁ EN SECO
+             maintenanceReason: 'Hibernación',
+             titularMooringId: fullId, // TIENE ESTA PLAZA
+             arrivalDate: '2023-05-01',
+             departureDate: '2023-11-01',
+             phone: "+44 7700 900077"
+        } as Boat;
+
+    } else if (fullId === 'P1/4B') {
+         // CASO: Titular en Mantenimiento (reparación). Plaza RESERVADA.
+         status = MooringStatus.RESERVED;
+         const titularId = `B-MANT-${globalId}`;
+         reservation = {
+            startDate: '2024-02-15',
+            endDate: '2024-03-01',
+            notes: 'Reparación motor',
+            relatedBoatId: titularId,
+            relatedBoatName: "FixMe Up",
+            type: 'MAINTENANCE_HOLD'
+         };
+         boat = {
+             id: titularId,
+             name: "FixMe Up",
+             owner: "Manolo Mechanic",
+             length: 7.8, beam: 2.9,
+             registration: "7ª-GC-5-2019",
+             flag: 'España', flagCode: 'es',
+             isBase: true,
+             inDryDock: true,
+             maintenanceReason: 'Mantenimiento',
+             titularMooringId: fullId,
+             arrivalDate: '2023-01-01',
+             departureDate: '2024-02-15',
+             phone: "+34 600 111 222"
+        } as Boat;
+
     } else {
-      status = MooringStatus.AVAILABLE;
-    }
+        // RESTO ALEATORIO
+        const r = Math.random();
+        if (r < 0.6) status = MooringStatus.OCCUPIED;
+        else if (r < 0.7) status = MooringStatus.RESERVED; // Reserva normal de tránsito
+        else if (r < 0.75) status = MooringStatus.MAINTENANCE; // Avería plaza
+        else status = MooringStatus.AVAILABLE;
 
-    const randomFlag = FLAGS[Math.floor(Math.random() * FLAGS.length)];
-    const randomBoatName = BOAT_NAMES[Math.floor(Math.random() * BOAT_NAMES.length)];
-    const randomOwner = OWNER_NAMES[Math.floor(Math.random() * OWNER_NAMES.length)];
-    const randomProv = REG_PROVINCES[Math.floor(Math.random() * REG_PROVINCES.length)];
-    const randomYear = 20 + Math.floor(Math.random() * 5);
-
-    // Creamos barco si está ocupado O si está en mantenimiento (barco en marina seca asociado)
-    const hasBoat = status === MooringStatus.OCCUPIED || status === MooringStatus.MAINTENANCE;
-
-    const boatData = hasBoat ? {
-      id: `B-${globalId}`,
-      name: randomBoatName,
-      owner: randomOwner,
-      phone: `+34 6${Math.floor(10000000 + Math.random() * 90000000)}`,
-      email: `${randomBoatName.toLowerCase().replace(/\s/g, '')}@gmail.com`,
-      length: Math.max(dims.l - (Math.random() * 2), 4).toFixed(1) as any, 
-      beam: Math.max(dims.b - (Math.random() * 1), 2).toFixed(1) as any,
-      arrivalDate: `2024-${Math.floor(Math.random() * 12 + 1).toString().padStart(2, '0')}-15`,
-      departureDate: '',
-      registration: `7ª-${randomProv}-${globalId}-${randomYear}`,
-      flag: randomFlag.name,
-      flagCode: randomFlag.code,
-      portOfRegistry: randomFlag.name === 'España' ? 'Camariñas' : 'Registro Extranjero',
-      skipperId: `${Math.floor(10000000 + Math.random() * 90000000)}${String.fromCharCode(65 + Math.floor(Math.random() * 26))}`,
-      nationality: randomFlag.name,
-      isBase: Math.random() > 0.6, // Más probabilidad de Base
-      // Si está en mantenimiento, simulamos hibernación
-      inDryDock: status === MooringStatus.MAINTENANCE,
-      maintenanceReturnDate: status === MooringStatus.MAINTENANCE 
-        ? `2024-${(new Date().getMonth() + 2).toString().padStart(2,'0')}-01` 
-        : undefined
-    } : undefined;
-
-    // Forzar que si es Mantenimiento, sea de Base
-    if (status === MooringStatus.MAINTENANCE && boatData) {
-      boatData.isBase = true;
+        if (status === MooringStatus.OCCUPIED) {
+            const randomFlag = FLAGS[Math.floor(Math.random() * FLAGS.length)];
+            const randomBoatName = BOAT_NAMES[Math.floor(Math.random() * BOAT_NAMES.length)];
+            const randomProv = REG_PROVINCES[Math.floor(Math.random() * REG_PROVINCES.length)];
+            boat = {
+                id: `B-${globalId}`,
+                name: randomBoatName,
+                owner: OWNER_NAMES[Math.floor(Math.random() * OWNER_NAMES.length)],
+                phone: `+34 6${Math.floor(10000000 + Math.random() * 90000000)}`,
+                email: `${randomBoatName.toLowerCase().replace(/\s/g, '')}@gmail.com`,
+                length: parseFloat(Math.max(dims.l - (Math.random() * 2), 4).toFixed(1)), 
+                beam: parseFloat(Math.max(dims.b - (Math.random() * 1), 2).toFixed(1)),
+                arrivalDate: `2024-${Math.floor(Math.random() * 12 + 1).toString().padStart(2, '0')}-15`,
+                departureDate: '',
+                registration: `7ª-${randomProv}-${globalId}-${20 + Math.floor(Math.random() * 5)}`,
+                flag: randomFlag.name,
+                flagCode: randomFlag.code,
+                portOfRegistry: randomFlag.name === 'España' ? 'Camariñas' : 'Registro Extranjero',
+                skipperId: `${Math.floor(10000000 + Math.random() * 90000000)}X`,
+                nationality: randomFlag.name,
+                isBase: Math.random() > 0.6,
+                inDryDock: false,
+                // Si es base, le asignamos esta plaza como titular
+                titularMooringId: (Math.random() > 0.6) ? fullId : undefined
+            };
+            if (boat.isBase) boat.titularMooringId = fullId;
+        } else if (status === MooringStatus.RESERVED) {
+            reservation = {
+                startDate: '2024-06-01',
+                endDate: '2024-06-15',
+                notes: 'Reserva Tránsito Booking',
+                relatedBoatName: 'Visitante Futuro',
+                type: 'TRANSIT_RESERVATION'
+            };
+        }
     }
 
     moorings.push({
@@ -147,7 +221,8 @@ const generateMoorings = (): Mooring[] => {
         length: dims.l,
         beam: dims.b
       },
-      boat: boatData
+      boat: boat,
+      reservation: reservation
     });
     globalId++;
   };
@@ -238,7 +313,7 @@ export const STATUS_LABELS = {
   [MooringStatus.AVAILABLE]: 'Disponible',
   [MooringStatus.OCCUPIED]: 'Ocupado',
   [MooringStatus.RESERVED]: 'Reservado',
-  [MooringStatus.MAINTENANCE]: 'Marina Seca / Mant.'
+  [MooringStatus.MAINTENANCE]: 'Mantenimiento'
 };
 
 export const FLAG_ISO_MAP: Record<string, string> = {

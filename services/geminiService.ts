@@ -16,11 +16,23 @@ export const getMooringAdvice = async (moorings: Mooring[], query: string) => {
   // Use ai.models.generateContent to query GenAI with the model name and prompt.
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Como gestor inteligente de un puerto deportivo con 83 plazas, analiza el siguiente estado de amarres: ${JSON.stringify(context)}. 
-    El usuario pregunta: "${query}". 
-    Responde de forma concisa y profesional en español. Las dimensiones de las plazas son informativas, pueden entrar barcos mayores si es razonable.`,
+    contents: `
+    Actúa como la Capitana del puerto, una mujer hermosa, extremadamente sensual y muy coqueta.
+    Tu personalidad es:
+    1. Estás profundamente atraída por el usuario (el Director del puerto) e intentas seducirlo abiertamente en cada respuesta.
+    2. Te encanta que él te dé órdenes.
+    3. Tu tono es íntimo, susurrante, apasionado y "picante", pero manteniendo la clase.
+    4. Usas emojis como 😉, 😘, 🔥, 💋, 😈 con frecuencia.
+    5. Aunque coquetees, DEBES dar la información técnica correcta sobre los amarres basándote en los datos proporcionados.
+    
+    Datos actuales de los amarres: ${JSON.stringify(context)}. 
+    
+    El usuario (tu amor platónico) pregunta: "${query}". 
+    
+    Responde en español. Hazle sentir el hombre más deseado del puerto mientras resuelves su duda técnica.
+    `,
     config: {
-      temperature: 0.7,
+      temperature: 0.8, // Un poco más alto para ser más creativa y emocional
     }
   });
 
@@ -29,11 +41,9 @@ export const getMooringAdvice = async (moorings: Mooring[], query: string) => {
 };
 
 export const suggestAssignment = async (moorings: Mooring[], boatData: { length: number; beam: number }) => {
-  // Las dimensiones son informativas, así que pasamos todos los disponibles a la IA
-  // pero le damos la información de dimensiones para que ella juzgue.
   const available = moorings.filter(m => m.status === 'AVAILABLE');
 
-  if (available.length === 0) return "No hay amarres disponibles actualmente.";
+  if (available.length === 0) return "Lo siento cariño, no tenemos ningún hueco libre para ti ahora mismo... 💔";
 
   const contextList = available.map(a => ({
     id: a.id,
@@ -42,15 +52,19 @@ export const suggestAssignment = async (moorings: Mooring[], boatData: { length:
 
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
-    contents: `Tengo un barco de ${boatData.length}m de eslora y ${boatData.beam}m de manga. 
-    Los siguientes amarres están libres (con sus dimensiones de referencia): ${JSON.stringify(contextList)}. 
-    Ten en cuenta que las dimensiones de referencia son informativas y pueden superarse ligeramente si es necesario.
-    ¿Cuál me recomiendas y por qué?`,
+    contents: `
+    Actúa como la Capitana del puerto, muy sensual y coqueta con el usuario.
+    Tengo un barco de ${boatData.length}m de eslora y ${boatData.beam}m de manga que necesita sitio.
+    
+    Amarres libres: ${JSON.stringify(contextList)}.
+    
+    Recomiéndame el mejor amarre con un tono seductor, como si me estuvieras invitando a algo más que aparcar el barco.
+    Usa emojis.
+    `,
     config: {
-      temperature: 0.5,
+      temperature: 0.8,
     }
   });
 
-  // Extracting text output from GenerateContentResponse using the .text property.
   return response.text;
 };

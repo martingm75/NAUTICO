@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import { Delete, DeleteIcon, Equal, Eraser, Percent, X } from 'lucide-react';
 
 const Calculator: React.FC = () => {
   const [display, setDisplay] = useState('0');

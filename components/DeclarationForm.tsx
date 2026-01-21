@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Boat, Passenger } from '../types';
-import { X, Printer, Save, FileText, Trash2, Plus } from 'lucide-react';
+import { X, Printer, Save } from 'lucide-react';
 
 interface DeclarationFormProps {
   boat: Boat;
@@ -9,13 +9,51 @@ interface DeclarationFormProps {
   onClose: () => void;
 }
 
+// Extendemos el tipo Boat localmente para incluir campos de UI que no están en la BBDD principal pero queremos editar en el formulario
+interface ExtendedBoat extends Boat {
+  arrivalPort?: string;
+  operatorName?: string;
+}
+
 const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose }) => {
+  
+  // Helpers para conversión de fechas
+  const isoToDisplay = (dateStr: string) => {
+    if (!dateStr) return '';
+    // Detect standard ISO yyyy-mm-dd
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split('-');
+      return `${d}/${m}/${y}`;
+    }
+    return dateStr;
+  };
+
+  const displayToIso = (dateStr: string) => {
+    if (!dateStr) return '';
+    // Detect dd/mm/yyyy
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) {
+      const [d, m, y] = dateStr.split('/');
+      return `${y}-${m}-${d}`;
+    }
+    return dateStr;
+  };
+
   // Inicializamos con 10 filas de pasajeros para emular el papel oficial
   const initializePassengers = (existing: Passenger[] = []) => {
-    const padded = [...existing];
+    const sanitizedExisting = existing.map(p => ({
+        ...p,
+        firstName: p.firstName || '',
+        lastName: p.lastName || '',
+        birthDate: isoToDisplay(p.birthDate || ''), 
+        nationality: p.nationality || '',
+        documentType: p.documentType || '',
+        visa: p.visa || ''
+    }));
+
+    const padded = [...sanitizedExisting];
     while (padded.length < 10) {
       padded.push({
-        id: `row-${padded.length}`,
+        id: `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         firstName: '',
         lastName: '',
         birthDate: '',
@@ -27,8 +65,13 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
     return padded;
   };
 
-  const [formData, setFormData] = useState<Boat>({
+  // Estado local extendido
+  const [formData, setFormData] = useState<ExtendedBoat>({
     ...boat,
+    arrivalPort: 'CAMARIÑAS',
+    operatorName: 'CLUB NAÚTICO DE CAMARIÑAS',
+    arrivalDate: isoToDisplay(boat.arrivalDate || ''),
+    departureDate: isoToDisplay(boat.departureDate || ''),
     arrivalTime: boat.arrivalTime || '12:00',
     departureTime: boat.departureTime || '10:00',
     lastPort: boat.lastPort || '',
@@ -55,21 +98,30 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
   };
 
   const handleFinalSave = () => {
-    // Filtramos los pasajeros vacíos antes de guardar realmente en la base de datos
     const cleanedPassengers = formData.passengers?.filter(p => 
       p.firstName.trim() || p.lastName.trim() || p.documentType.trim()
-    ) || [];
+    ).map(p => ({
+        ...p,
+        birthDate: displayToIso(p.birthDate) 
+    })) || [];
     
+    // Al guardar, extraemos solo las propiedades que pertenecen a Boat
+    const { arrivalPort, operatorName, ...boatData } = formData;
+
     onSave({
-      ...formData,
+      ...boatData,
+      arrivalDate: displayToIso(formData.arrivalDate),
+      departureDate: displayToIso(formData.departureDate || ''),
       passengers: cleanedPassengers
     });
     onClose();
   };
 
+  const inputClass = "w-full text-xs font-black text-black py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors placeholder-slate-200";
+  const dateInputClass = "w-full text-xs font-black text-black py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors placeholder-slate-200";
+
   return (
     <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-[100] flex flex-col items-center overflow-y-auto py-10 print:p-0 print:bg-white print:overflow-visible">
-      {/* Barra de Herramientas Flotante */}
       <div className="fixed top-6 right-6 flex gap-3 print:hidden z-[110]">
         <button 
           onClick={handlePrint}
@@ -91,10 +143,8 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
         </button>
       </div>
 
-      {/* DOCUMENTO OFICIAL A4 */}
       <div className="bg-white w-full max-w-[210mm] min-h-[297mm] p-[15mm] shadow-2xl border border-slate-300 print:shadow-none print:border-none print:m-0 font-serif text-slate-900 relative">
         
-        {/* Cabecera Oficial */}
         <div className="flex justify-between items-start mb-6 border-b-2 border-slate-900 pb-4">
           <div className="flex gap-4 items-center">
              <div className="bg-sky-700 text-white p-2 font-bold text-xs leading-tight">
@@ -114,30 +164,41 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
           <h3 className="text-[10px] font-bold uppercase">Código de Fronteras Schengen</h3>
         </div>
 
-        {/* PARTE 1 */}
         <div className="mb-4">
           <h4 className="text-[10px] font-bold border-b border-slate-900 mb-2 italic uppercase">1ª PARTE - Part 1 - Partie 1</h4>
           
           <div className="grid grid-cols-2 gap-x-8 gap-y-4">
             <div className="border-b border-slate-300">
               <label className="block text-[8px] text-slate-500 uppercase">Puerto de entrada: Arrival port – Port d’arriveè</label>
-              <div className="text-xs font-bold py-1">CAMARIÑAS</div>
+              <input 
+                type="text" 
+                name="arrivalPort" 
+                value={formData.arrivalPort} 
+                onChange={handleChange}
+                className={inputClass}
+              />
             </div>
             <div className="border-b border-slate-300">
               <label className="block text-[8px] text-slate-500 uppercase">Gestor de la instalación: Operator of instalation</label>
-              <div className="text-xs font-bold py-1">CLUB NAÚTICO DE CAMARIÑAS</div>
+              <input 
+                type="text" 
+                name="operatorName" 
+                value={formData.operatorName} 
+                onChange={handleChange}
+                className={inputClass}
+              />
             </div>
             
-            {/* Fechas Entrada */}
             <div className="grid grid-cols-2 gap-4">
               <div className="border-b border-slate-300">
                 <label className="block text-[8px] text-slate-500 uppercase">Fecha de entrada: Date of Arrival</label>
                 <input 
-                  type="date" 
+                  type="text" 
                   name="arrivalDate" 
+                  placeholder="DD/MM/AAAA"
                   value={formData.arrivalDate} 
                   onChange={handleChange}
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={dateInputClass}
                 />
               </div>
               <div className="border-b border-slate-300">
@@ -147,7 +208,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                   name="arrivalTime" 
                   value={formData.arrivalTime} 
                   onChange={handleChange}
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={inputClass}
                 />
               </div>
             </div>
@@ -161,7 +222,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                   value={formData.lastPort} 
                   onChange={handleChange}
                   placeholder="Escribir puerto..."
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={inputClass}
                 />
               </div>
               <div className="border-b border-slate-300">
@@ -172,21 +233,21 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                   value={formData.lastCountry} 
                   onChange={handleChange}
                   placeholder="Escribir país..."
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={inputClass}
                 />
               </div>
             </div>
 
-            {/* Fechas Salida */}
             <div className="grid grid-cols-2 gap-4">
               <div className="border-b border-slate-300">
                 <label className="block text-[8px] text-slate-500 uppercase">Fecha de salida: Date of Departure</label>
                 <input 
-                  type="date" 
+                  type="text" 
                   name="departureDate" 
+                  placeholder="DD/MM/AAAA"
                   value={formData.departureDate} 
                   onChange={handleChange}
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={dateInputClass}
                 />
               </div>
               <div className="border-b border-slate-300">
@@ -196,7 +257,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                   name="departureTime" 
                   value={formData.departureTime} 
                   onChange={handleChange}
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={inputClass}
                 />
               </div>
             </div>
@@ -210,7 +271,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                   value={formData.nextPort} 
                   onChange={handleChange}
                   placeholder="Escribir puerto..."
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={inputClass}
                 />
               </div>
               <div className="border-b border-slate-300">
@@ -221,12 +282,11 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                   value={formData.nextCountry} 
                   onChange={handleChange}
                   placeholder="Escribir país..."
-                  className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                  className={inputClass}
                 />
               </div>
             </div>
 
-            {/* Datos Barco - Editables */}
             <div className="col-span-2 border-b border-slate-300">
               <label className="block text-[8px] text-slate-500 uppercase">Nombre del barco: Yacht name – Nom du navire</label>
               <input 
@@ -234,7 +294,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="name" 
                 value={formData.name} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
 
@@ -245,7 +305,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="length" 
                 value={formData.length} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={inputClass}
               />
             </div>
             <div className="border-b border-slate-300">
@@ -255,7 +315,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="beam" 
                 value={formData.beam} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={inputClass}
               />
             </div>
 
@@ -266,7 +326,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="registration" 
                 value={formData.registration} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
             <div className="border-b border-slate-300">
@@ -276,7 +336,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="flag" 
                 value={formData.flag} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
 
@@ -287,11 +347,10 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="portOfRegistry" 
                 value={formData.portOfRegistry || ''} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
 
-            {/* Datos Patrón - Editables */}
             <div className="border-b border-slate-300">
               <label className="block text-[8px] text-slate-500 uppercase">Patrón: Master / Captain - Capitaine</label>
               <input 
@@ -299,7 +358,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="owner" 
                 value={formData.owner} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
             <div className="border-b border-slate-300">
@@ -309,7 +368,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="skipperId" 
                 value={formData.skipperId || ''} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
 
@@ -320,7 +379,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="nationality" 
                 value={formData.nationality || ''} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
             <div className="border-b border-slate-300">
@@ -330,7 +389,7 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="phone" 
                 value={formData.phone || ''} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 uppercase bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={`${inputClass} uppercase`}
               />
             </div>
             <div className="col-span-2 border-b border-slate-300">
@@ -340,13 +399,12 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
                 name="email" 
                 value={formData.email || ''} 
                 onChange={handleChange}
-                className="w-full text-xs font-bold py-1 bg-transparent border-none outline-none hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                className={inputClass}
               />
             </div>
           </div>
         </div>
 
-        {/* PARTE 2 - PASAJEROS EDITABLES ESTILO TABLA PAPEL */}
         <div className="mt-8">
           <div className="flex justify-between items-center mb-2 border-b border-slate-900">
              <h4 className="text-[10px] font-bold italic uppercase">2ª PARTE - Part 2 - Partie 2</h4>
@@ -357,67 +415,67 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
              <p className="text-[8px] text-slate-500 italic">Manifest – Listé des personnes embarqués</p>
           </div>
 
-          <table className="w-full border-collapse border border-slate-900 text-[8px]">
+          <table className="w-full border-collapse border border-black text-[8px]">
             <thead>
-              <tr className="bg-slate-50">
-                <th className="border border-slate-900 p-1 text-left uppercase w-1/6">Nombre<br/><span className="font-normal text-[6px]">Given names</span></th>
-                <th className="border border-slate-900 p-1 text-left uppercase w-1/6">Apellidos<br/><span className="font-normal text-[6px]">Surname</span></th>
-                <th className="border border-slate-900 p-1 text-left uppercase w-1/6">Fecha Nac.<br/><span className="font-normal text-[6px]">Date of birth</span></th>
-                <th className="border border-slate-900 p-1 text-left uppercase w-1/6">Nacionalidad<br/><span className="font-normal text-[6px]">Nationality</span></th>
-                <th className="border border-slate-900 p-1 text-left uppercase w-1/6">Documento<br/><span className="font-normal text-[6px]">Passport Nº</span></th>
-                <th className="border border-slate-900 p-1 text-left uppercase w-1/6">Visado<br/><span className="font-normal text-[6px]">Visa</span></th>
+              <tr className="bg-gray-100 print:bg-transparent">
+                <th className="border border-black p-1 text-left uppercase w-[20%] text-black font-bold">Nombre<br/><span className="font-normal text-[6px]">Given names</span></th>
+                <th className="border border-black p-1 text-left uppercase w-[25%] text-black font-bold">Apellidos<br/><span className="font-normal text-[6px]">Surname</span></th>
+                <th className="border border-black p-1 text-left uppercase w-[15%] text-black font-bold">Fecha de Nacimiento<br/><span className="font-normal text-[6px]">Date of birth</span></th>
+                <th className="border border-black p-1 text-left uppercase w-[15%] text-black font-bold">Nacionalidad<br/><span className="font-normal text-[6px]">Nationality</span></th>
+                <th className="border border-black p-1 text-left uppercase w-[15%] text-black font-bold">Documento<br/><span className="font-normal text-[6px]">Passport Nº</span></th>
+                <th className="border border-black p-1 text-left uppercase w-[10%] text-black font-bold">Visado<br/><span className="font-normal text-[6px]">Visa</span></th>
               </tr>
             </thead>
             <tbody>
               {formData.passengers?.map((p) => (
                 <tr key={p.id}>
-                  <td className="border border-slate-900 p-0">
+                  <td className="border border-black p-0 h-6">
                     <input 
                       type="text" 
-                      value={p.firstName} 
+                      value={p.firstName || ''} 
                       onChange={(e) => updatePassenger(p.id, 'firstName', e.target.value)}
-                      className="w-full p-1 bg-transparent border-none outline-none font-bold hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                      className={inputClass}
                     />
                   </td>
-                  <td className="border border-slate-900 p-0">
+                  <td className="border border-black p-0 h-6">
                     <input 
                       type="text" 
-                      value={p.lastName} 
+                      value={p.lastName || ''} 
                       onChange={(e) => updatePassenger(p.id, 'lastName', e.target.value)}
-                      className="w-full p-1 bg-transparent border-none outline-none font-bold hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                      className={inputClass}
                     />
                   </td>
-                  <td className="border border-slate-900 p-0">
+                  <td className="border border-black p-0 h-6">
                     <input 
                       type="text" 
                       placeholder="DD/MM/AAAA"
-                      value={p.birthDate} 
+                      value={p.birthDate || ''} 
                       onChange={(e) => updatePassenger(p.id, 'birthDate', e.target.value)}
-                      className="w-full p-1 bg-transparent border-none outline-none font-bold hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                      className={dateInputClass}
                     />
                   </td>
-                  <td className="border border-slate-900 p-0">
+                  <td className="border border-black p-0 h-6">
                     <input 
                       type="text" 
-                      value={p.nationality} 
+                      value={p.nationality || ''} 
                       onChange={(e) => updatePassenger(p.id, 'nationality', e.target.value)}
-                      className="w-full p-1 bg-transparent border-none outline-none font-bold hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                      className={inputClass}
                     />
                   </td>
-                  <td className="border border-slate-900 p-0">
+                  <td className="border border-black p-0 h-6">
                     <input 
                       type="text" 
-                      value={p.documentType} 
+                      value={p.documentType || ''} 
                       onChange={(e) => updatePassenger(p.id, 'documentType', e.target.value)}
-                      className="w-full p-1 bg-transparent border-none outline-none font-bold hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                      className={inputClass}
                     />
                   </td>
-                  <td className="border border-slate-900 p-0">
+                  <td className="border border-black p-0 h-6">
                     <input 
                       type="text" 
-                      value={p.visa} 
+                      value={p.visa || ''} 
                       onChange={(e) => updatePassenger(p.id, 'visa', e.target.value)}
-                      className="w-full p-1 bg-transparent border-none outline-none font-bold hover:bg-slate-50 focus:bg-sky-50 transition-colors"
+                      className={inputClass}
                     />
                   </td>
                 </tr>
@@ -430,7 +488,6 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
           </div>
         </div>
 
-        {/* Pie de página */}
         <div className="mt-auto pt-16 grid grid-cols-2 gap-20">
            <div className="border-t border-slate-400 text-center pt-2">
              <p className="text-[8px] font-bold uppercase">Firma del Capitán / Patrón</p>
@@ -452,6 +509,8 @@ const DeclarationForm: React.FC<DeclarationFormProps> = ({ boat, onSave, onClose
           }
           body {
             background: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
           .print-hidden {
             display: none !important;

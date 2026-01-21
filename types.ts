@@ -18,6 +18,13 @@ export interface Passenger {
   visa?: string;
 }
 
+export interface Stay {
+  arrivalDate: string;
+  departureDate: string;
+  mooringId?: string; // Opcional: saber dónde estuvo
+  notes?: string;
+}
+
 export interface Boat {
   id: string;
   name: string;
@@ -38,6 +45,15 @@ export interface Boat {
   nationality?: string;
   isBase?: boolean; 
   inDryDock?: boolean;
+  maintenanceReason?: 'Mantenimiento' | 'Hibernación';
+  maintenanceReturnDate?: string;
+  
+  // Plaza de la que es titular (para volver automáticamente)
+  titularMooringId?: string;
+
+  // Historial de estancias pasadas
+  history?: Stay[];
+
   // Campos específicos Anexo 2
   lastPort?: string;
   lastCountry?: string;
@@ -62,6 +78,9 @@ export interface Mooring {
     startDate: string;
     endDate: string;
     notes?: string;
+    relatedBoatId?: string; // ID del barco titular que está fuera
+    relatedBoatName?: string;
+    type?: 'MAINTENANCE_HOLD' | 'TRANSIT_RESERVATION';
   };
 }
 
