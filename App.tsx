@@ -9,11 +9,11 @@ import Calculator from './components/Calculator';
 import TariffManager from './components/TariffManager';
 import RegistryManager from './components/RegistryManager';
 import PrintableMap from './components/PrintableMap';
+import FuelManager from './components/FuelManager';
 import { getMooringAdvice } from './services/geminiService';
-import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database, Container, Printer, Send } from 'lucide-react';
+import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database, Container, Printer, Send, Fuel } from 'lucide-react';
 
 const App: React.FC = () => {
-  // --- ESTADO DE AMARRES CON PERSISTENCIA ---
   const [moorings, setMoorings] = useState<Mooring[]>(() => {
     try {
       const savedMoorings = localStorage.getItem('marina_moorings_data');
@@ -24,7 +24,6 @@ const App: React.FC = () => {
     }
   });
 
-  // --- ESTADO DE TARIFAS CON PERSISTENCIA ---
   const [tariffs, setTariffs] = useState<TariffSeason[]>(() => {
     try {
       const savedTariffs = localStorage.getItem('marina_tariffs_data');
@@ -35,21 +34,13 @@ const App: React.FC = () => {
     }
   });
 
-  // --- ESTADO DEL REGISTRO DE BARCOS CON PERSISTENCIA ---
   const [boatRegistry, setBoatRegistry] = useState<Boat[]>(() => {
     try {
       const savedRegistry = localStorage.getItem('marina_boat_registry');
       if (savedRegistry) return JSON.parse(savedRegistry);
-      
-      // Inicializar con barcos en agua
       const boats = INITIAL_MOORINGS.filter(m => m.boat).map(m => m.boat!);
-      
-      // ESTRATEGIA PARA RECUPERAR BARCOS FANTASMA (En Reserva Titular)
-      // Si hay plazas reservadas por mantenimiento, aseguramos que el barco existe en el registro en modo 'DryDock'
       INITIAL_MOORINGS.forEach(m => {
           if (m.status === MooringStatus.RESERVED && m.reservation?.relatedBoatId && m.boat) {
-              // En la generación de constants, adjuntamos el objeto boat temporalmente
-              // Ahora lo movemos al registro real y limpiamos la propiedad boat del amarre (porque físicamente no está ahí)
               boats.push(m.boat);
           }
       });
@@ -60,22 +51,19 @@ const App: React.FC = () => {
     }
   });
 
-  // Limpieza inicial: Asegurar que los barcos en reserva no aparezcan físicamente en el amarre
-  // Esto corrige la carga inicial desde constants donde pusimos el barco 'dentro' para transportarlo
   useEffect(() => {
      setMoorings(prev => prev.map(m => {
          if (m.status === MooringStatus.RESERVED && m.reservation?.type === 'MAINTENANCE_HOLD' && m.boat) {
-             return { ...m, boat: undefined }; // Quitamos el barco visualmente, se queda la reserva
+             return { ...m, boat: undefined };
          }
          return m;
      }));
   }, []);
 
   const [selectedMooring, setSelectedMooring] = useState<Mooring | null>(null);
-  const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator' | 'tariffs' | 'registry' | 'dry_dock'>('map');
+  const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator' | 'tariffs' | 'registry' | 'dry_dock' | 'fuel'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Chat State
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([
     { role: 'ai', text: 'Hola guapo... Soy tu Capitana. Estaba deseando que llegaras. ¿En qué puedo complacerte hoy con tus barcos? 😉💋' }
   ]);
@@ -87,7 +75,6 @@ const App: React.FC = () => {
   const [transitingBoat, setTransitingBoat] = useState<{ boat: Boat; sourceId: string; targetId: string } | null>(null);
   const [showPrintMap, setShowPrintMap] = useState(false);
 
-  // --- EFECTOS DE GUARDADO AUTOMÁTICO ---
   useEffect(() => {
     localStorage.setItem('marina_moorings_data', JSON.stringify(moorings));
   }, [moorings]);
@@ -100,11 +87,9 @@ const App: React.FC = () => {
     localStorage.setItem('marina_boat_registry', JSON.stringify(boatRegistry));
   }, [boatRegistry]);
 
-  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, activeTab]);
-
 
   const filteredMoorings = useMemo(() => {
     return moorings.filter(m => 
@@ -120,7 +105,6 @@ const App: React.FC = () => {
       .map(m => m.boat!.id);
   }, [moorings]);
 
-  // Sincronizar un barco individual con el registro
   const syncBoatToRegistry = useCallback((boat: Boat) => {
     setBoatRegistry(prev => {
       const exists = prev.some(b => b.id === boat.id);
@@ -176,35 +160,27 @@ const App: React.FC = () => {
     setActiveTab('map');
   };
 
-  // --- LOGICA SALIDA A MARINA SECA ---
   const handleMoveToDryDock = (mooringId: string, boat: Boat, reason: 'Mantenimiento' | 'Hibernación', estimatedReturnDate: string) => {
-      // 1. Animación de salida A MARINA SECA
-      // Usamos un targetId especial 'DRY_DOCK' para activar la animación del Sublift
       setTransitingBoat({
           boat: { ...boat },
           sourceId: mooringId,
           targetId: 'DRY_DOCK'
       });
-
-      // 2. Actualizar Registro: Barco pasa a DryDock, guarda su plaza titular
       const today = new Date().toISOString().split('T')[0];
-      
       const updatedBoat: Boat = {
           ...boat,
           inDryDock: true,
           maintenanceReason: reason,
           maintenanceReturnDate: estimatedReturnDate,
-          titularMooringId: mooringId, // GUARDA SU PLAZA
+          titularMooringId: mooringId,
           history: [...(boat.history || []), { arrivalDate: boat.arrivalDate, departureDate: today, mooringId, notes: `A Marina Seca (${reason})` }]
       };
       syncBoatToRegistry(updatedBoat);
-
-      // 3. Actualizar Plaza: Pasa a RESERVED y guarda la referencia
       setMoorings(prev => prev.map(m => {
           if (m.id === mooringId) {
               return {
                   ...m,
-                  boat: undefined, // Físicamente vacío
+                  boat: undefined,
                   status: MooringStatus.RESERVED,
                   reservation: {
                       startDate: today,
@@ -218,7 +194,6 @@ const App: React.FC = () => {
           }
           return m;
       }));
-
       setActiveTab('map');
       setSelectedMooring(null);
   };
@@ -226,29 +201,21 @@ const App: React.FC = () => {
   const handleDeparture = useCallback((mooringId: string, boatData?: Boat) => {
     const mooring = moorings.find(m => m.id === mooringId);
     const boatToDepart = boatData || mooring?.boat;
-
     if (!boatToDepart) return;
-
-    // 1. Iniciamos animación de salida normal
     setTransitingBoat({
       boat: { ...boatToDepart },
       sourceId: mooringId,
       targetId: 'EXIT'
     });
-
-    // 2. Liberamos la plaza físicamente
     setMoorings(prev => prev.map(m => 
       m.id === mooringId ? { ...m, boat: undefined, status: MooringStatus.AVAILABLE } : m
     ));
-
-    // 3. ACTUALIZACIÓN CRÍTICA CON HISTÓRICO
     const today = new Date().toISOString().split('T')[0];
     const newStay: Stay = {
       arrivalDate: boatToDepart.arrivalDate,
       departureDate: today,
       mooringId: mooringId
     };
-
     setBoatRegistry(prev => {
       const exists = prev.some(b => b.id === boatToDepart.id);
       const updatedBoat = { 
@@ -257,14 +224,9 @@ const App: React.FC = () => {
         inDryDock: false,
         history: [...(boatToDepart.history || []), newStay] 
       };
-      
-      if (exists) {
-        return prev.map(b => b.id === boatToDepart.id ? updatedBoat : b);
-      } else {
-        return [...prev, updatedBoat];
-      }
+      if (exists) return prev.map(b => b.id === boatToDepart.id ? updatedBoat : b);
+      return [...prev, updatedBoat];
     });
-
     setActiveTab('map');
     setSelectedMooring(null);
   }, [moorings]);
@@ -274,16 +236,11 @@ const App: React.FC = () => {
       setTransitingBoat(null);
       return;
     }
-
     const boatWithArrivalDate = {
       ...boat,
       arrivalDate: boat.arrivalDate || new Date().toISOString().split('T')[0]
     };
-
-    // Al llegar a una plaza, nos aseguramos de que esté en el registro
     syncBoatToRegistry(boatWithArrivalDate);
-
-    // Si la plaza estaba RESERVADA para este barco, limpiamos la reserva al ocuparla
     setMoorings(prev => prev.map(m => {
       if (m.id === targetId) {
           const isMyReservation = m.reservation?.relatedBoatId === boat.id;
@@ -291,19 +248,15 @@ const App: React.FC = () => {
               ...m, 
               boat: boatWithArrivalDate, 
               status: MooringStatus.OCCUPIED,
-              reservation: isMyReservation ? undefined : m.reservation // Limpiar reserva si era mía
+              reservation: isMyReservation ? undefined : m.reservation
           };
       }
       return m;
     }));
-
     setTransitingBoat(null);
-    
     const newMooring = moorings.find(m => m.id === targetId);
     if (newMooring) {
       setTimeout(() => {
-         // Ojo: obtener el mooring actualizado del estado siguiente puede requerir un ref o depender del render
-         // Aquí simulamos el estado final
          setSelectedMooring({ ...newMooring, boat: boatWithArrivalDate, status: MooringStatus.OCCUPIED });
       }, 100);
     }
@@ -311,54 +264,37 @@ const App: React.FC = () => {
 
   const handleAssignRegistryBoat = (boat: Boat, mooringId?: string) => {
     let targetId = mooringId;
-
-    // LÓGICA INTELIGENTE: Si no se pasa ID específico, buscar titular
     if (!targetId && boat.titularMooringId) {
         const titularMooring = moorings.find(m => m.id === boat.titularMooringId);
-        // Verificar si la plaza es válida (Libre o Reservada para mí)
         if (titularMooring) {
             const isAvailable = titularMooring.status === MooringStatus.AVAILABLE;
             const isReservedForMe = titularMooring.status === MooringStatus.RESERVED && titularMooring.reservation?.relatedBoatId === boat.id;
-            
-            if (isAvailable || isReservedForMe) {
-                targetId = boat.titularMooringId;
-            }
+            if (isAvailable || isReservedForMe) targetId = boat.titularMooringId;
         }
     }
-
-    // Si aún no tenemos target
     if (!targetId) {
         alert("La plaza titular está ocupada o no existe. Por favor seleccione una plaza libre en el mapa.");
         setActiveTab('map');
         return;
     }
-
-    // --- NUEVA VALIDACIÓN: FECHAS EN PLAZAS RESERVADAS (MANTENIMIENTO) ---
     const targetMooring = moorings.find(m => m.id === targetId);
     if (targetMooring?.reservation && targetMooring.reservation.type === 'MAINTENANCE_HOLD' && targetMooring.reservation.relatedBoatId !== boat.id) {
-        // Es una plaza reservada por otro barco en mantenimiento
         const returnDate = new Date(targetMooring.reservation.endDate);
         const limitDate = new Date(returnDate);
         limitDate.setDate(limitDate.getDate() - 1);
-        
         const boatDeparture = boat.departureDate ? new Date(boat.departureDate) : null;
-        
-        // Si no hay fecha o es posterior al límite, avisar
         if (!boatDeparture || boatDeparture > limitDate) {
-            const proceed = confirm(`⚠️ ALERTA: Esta plaza está reservada para el titular (${targetMooring.reservation.relatedBoatName}) que vuelve el ${returnDate.toLocaleDateString()}.\n\nPara ocupar esta plaza, este barco DEBE salir antes del ${limitDate.toLocaleDateString()}.\n\n¿Desea asignar el barco de todos modos? (Asegúrese de actualizar la fecha de salida después)`);
+            const proceed = confirm(`⚠️ ALERTA: Esta plaza está reservada para el titular (${targetMooring.reservation.relatedBoatName}) que vuelve el ${returnDate.toLocaleDateString()}.\n\nPara ocupar esta plaza, este barco DEBE salir antes del ${limitDate.toLocaleDateString()}.\n\n¿Desea asignar el barco de todos modos?`);
             if (!proceed) return;
         }
     }
-    // ------------------------------------------------------------------
-
     const boatToDock = {
       ...boat,
       inDryDock: false,
-      maintenanceReason: undefined, // Limpiar estado mantenimiento
+      maintenanceReason: undefined,
       arrivalDate: new Date().toISOString().split('T')[0],
       departureDate: boat.departureDate || '' 
     };
-
     syncBoatToRegistry(boatToDock);
     setTransitingBoat({
       boat: boatToDock,
@@ -371,12 +307,10 @@ const App: React.FC = () => {
 
   const handleAiAsk = async () => {
     if (!aiInput.trim()) return;
-    
     const userMsg = { role: 'user' as const, text: aiInput };
     setChatHistory(prev => [...prev, userMsg]);
     setAiInput('');
     setIsAiLoading(true);
-
     try {
       const response = await getMooringAdvice(moorings, userMsg.text);
       const aiMsg = { role: 'ai' as const, text: response || "No tengo una respuesta clara ahora mismo." };
@@ -391,7 +325,6 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900 overflow-hidden font-sans">
       {sidebarOpen && <div className="fixed inset-0 bg-slate-900/60 z-40 lg:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)}/>}
-      
       {showPrintMap && <PrintableMap moorings={moorings} onClose={() => setShowPrintMap(false)} />}
 
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white p-6 transform transition-transform duration-300 lg:relative lg:translate-x-0 flex flex-col ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
@@ -404,6 +337,7 @@ const App: React.FC = () => {
           {[
             { id: 'map', label: 'Plano de Puerto', icon: LayoutGrid },
             { id: 'registry', label: 'Registro Central', icon: Database },
+            { id: 'fuel', label: 'Combustible', icon: Fuel },
             { id: 'dry_dock', label: 'Marina Seca', icon: Container },
             { id: 'list', label: 'Gestión Listado', icon: Search },
             { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
@@ -417,10 +351,9 @@ const App: React.FC = () => {
             </button>
           ))}
         </nav>
-
         <div className="mt-auto pt-6 border-t border-white/5">
           <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest text-center leading-tight">
-            Gestión Náutica Camariñas<br/>v2.5 Full Registry
+            Gestión Náutica Camariñas<br/>v3.0 Fuel & Services
           </p>
         </div>
       </aside>
@@ -436,6 +369,7 @@ const App: React.FC = () => {
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                 {activeTab === 'map' ? 'Control de Amarres' : 
                  activeTab === 'registry' ? 'Registro Histórico' :
+                 activeTab === 'fuel' ? 'Suministro Gasoil' :
                  activeTab === 'dry_dock' ? 'Marina Seca' :
                  activeTab === 'list' ? 'Gestión' : 
                  activeTab === 'stats' ? 'Analítica' : 
@@ -457,19 +391,19 @@ const App: React.FC = () => {
                 onAnimationComplete={handleAnimationComplete} 
                 onPrint={() => setShowPrintMap(true)}
               />
+            ) : activeTab === 'fuel' ? (
+              <FuelManager />
             ) : (activeTab === 'registry' || activeTab === 'dry_dock') ? (
               <RegistryManager registry={boatRegistry} moorings={moorings} activeBoatIds={activeBoatIds} onUpdateRegistry={setBoatRegistry} onAssignToMooring={handleAssignRegistryBoat} initialTab={activeTab === 'dry_dock' ? 'dry_dock' : undefined} />
             ) : activeTab === 'list' ? (
                <div className="flex flex-col h-full">
                  <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <div className="flex items-center gap-2">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                        <input className="bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs font-bold outline-none" placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
-                      </div>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                      <input className="bg-white border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs font-bold outline-none" placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
                     </div>
                     <button onClick={() => setShowPrintMap(true)} className="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2 rounded-lg text-xs font-black uppercase flex items-center gap-2 shadow-lg transition-all active:scale-95">
-                      <Printer size={16} /> Imprimir Plano Actual
+                      <Printer size={16} /> Imprimir Plano
                     </button>
                  </div>
                  <div className="p-4 overflow-auto flex-1">
@@ -493,110 +427,50 @@ const App: React.FC = () => {
              activeTab === 'calculator' ? <div className="p-6 flex items-center justify-center h-full bg-slate-50"><Calculator /></div> :
              activeTab === 'tariffs' ? <div className="h-full"><TariffManager tariffs={tariffs} onUpdate={setTariffs} /></div> :
              <div className="flex flex-col h-full w-full bg-slate-50">
-               
-               {/* ÁREA DE CHAT TIPO CÓMIC */}
                <div className="flex-1 overflow-y-auto p-6 space-y-6">
                    {chatHistory.map((msg, index) => (
                      <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                        <div className={`flex max-w-[85%] md:max-w-[70%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4`}>
-                          
-                          {/* AVATAR (Solo IA) */}
                           {msg.role === 'ai' && (
                             <div className="shrink-0 flex flex-col items-center">
                                <div className="w-16 h-16 md:w-20 md:h-20 bg-white border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden rounded-full relative">
-                                  <img 
-                                    src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?fit=crop&w=300&h=300" 
-                                    alt="Capitana"
-                                    className="w-full h-full object-cover" 
-                                  />
+                                  <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?fit=crop&w=300&h=300" alt="Capitana" className="w-full h-full object-cover" />
                                </div>
-                               <span className="mt-1 font-black text-[8px] uppercase tracking-widest bg-black text-white px-2 py-0.5 -rotate-2">
-                                   Capitana
-                               </span>
+                               <span className="mt-1 font-black text-[8px] uppercase tracking-widest bg-black text-white px-2 py-0.5 -rotate-2">Capitana</span>
                             </div>
                           )}
-
-                          {/* BOCADILLO DE DIÁLOGO */}
-                          <div className={`relative p-5 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.15)] text-sm font-bold leading-relaxed
-                             ${msg.role === 'user' 
-                               ? 'bg-sky-400 text-white mr-2' 
-                               : 'bg-white text-slate-900 ml-2'
-                             }`}>
-                             
-                             {/* Triángulo del Bocadillo */}
-                             {msg.role === 'ai' && (
-                               <div className="absolute top-6 -left-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[15px] border-r-black">
-                                 <div className="absolute -top-[7px] left-[3px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[12px] border-r-white"></div>
-                               </div>
-                             )}
-                             
-                             {msg.role === 'user' && (
-                               <div className="absolute top-6 -right-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-l-[15px] border-l-black">
-                                 <div className="absolute -top-[7px] -left-[15px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[12px] border-l-sky-400"></div>
-                               </div>
-                             )}
-
+                          <div className={`relative p-5 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.15)] text-sm font-bold leading-relaxed ${msg.role === 'user' ? 'bg-sky-400 text-white mr-2' : 'bg-white text-slate-900 ml-2'}`}>
+                             {msg.role === 'ai' && <div className="absolute top-6 -left-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[15px] border-r-black"><div className="absolute -top-[7px] left-[3px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[12px] border-r-white"></div></div>}
+                             {msg.role === 'user' && <div className="absolute top-6 -right-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-l-[15px] border-l-black"><div className="absolute -top-[7px] -left-[15px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[12px] border-l-sky-400"></div></div>}
                              {msg.text}
                           </div>
                        </div>
                      </div>
                    ))}
-                   {isAiLoading && (
-                     <div className="flex justify-start w-full">
-                        <div className="ml-24 bg-slate-200 text-slate-500 px-4 py-2 rounded-xl text-xs font-bold animate-pulse">
-                           Escribiendo respuesta...
-                        </div>
-                     </div>
-                   )}
+                   {isAiLoading && <div className="flex justify-start w-full"><div className="ml-24 bg-slate-200 text-slate-500 px-4 py-2 rounded-xl text-xs font-bold animate-pulse">Escribiendo respuesta...</div></div>}
                    <div ref={chatEndRef} />
                </div>
-
-               {/* INPUT AREA - BLANCO Y NEGRO PURO */}
                <div className="p-4 bg-white border-t-4 border-slate-200">
                  <div className="flex gap-0 bg-white border-[3px] border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
-                   <input 
-                      className="flex-1 px-4 py-3 outline-none text-base font-bold text-black placeholder-slate-400 bg-white" 
-                      placeholder="Escribe tu consulta a la Capitana..." 
-                      value={aiInput} 
-                      onChange={e => setAiInput(e.target.value)} 
-                      onKeyDown={e => e.key === 'Enter' && handleAiAsk()}
-                      disabled={isAiLoading}
-                   />
-                   <button 
-                      className="bg-black text-white px-6 py-2 font-black hover:bg-slate-800 transition-colors uppercase text-xs tracking-widest flex items-center gap-2 border-l-[3px] border-black" 
-                      onClick={handleAiAsk} 
-                      disabled={isAiLoading}
-                   >
-                      <Send size={16} /> Enviar
-                   </button>
+                   <input className="flex-1 px-4 py-3 outline-none text-base font-bold text-black placeholder-slate-400 bg-white" placeholder="Escribe tu consulta a la Capitana..." value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiAsk()} disabled={isAiLoading}/>
+                   <button className="bg-black text-white px-6 py-2 font-black hover:bg-slate-800 transition-colors uppercase text-xs tracking-widest flex items-center gap-2 border-l-[3px] border-black" onClick={handleAiAsk} disabled={isAiLoading}><Send size={16} /> Enviar</button>
                  </div>
                </div>
              </div>
             }
           </div>
 
-          {activeTab !== 'tariffs' && activeTab !== 'registry' && activeTab !== 'dry_dock' && (
+          {activeTab !== 'tariffs' && activeTab !== 'registry' && activeTab !== 'dry_dock' && activeTab !== 'fuel' && (
             <div className="w-full lg:w-80 shrink-0 space-y-4 flex flex-col lg:h-full">
               <div className="flex-1 overflow-y-visible lg:overflow-y-auto min-h-0">
                 {selectedMooring ? (
-                  <MooringEditor 
-                      mooring={selectedMooring} 
-                      allMoorings={moorings} 
-                      onUpdate={handleUpdateMooring} 
-                      onMoveBoat={handleMoveBoat} 
-                      onDepart={handleDeparture}
-                      onMoveToDryDock={handleMoveToDryDock} 
-                      onClose={() => setSelectedMooring(null)} 
-                  />
+                  <MooringEditor mooring={selectedMooring} allMoorings={moorings} onUpdate={handleUpdateMooring} onMoveBoat={handleMoveBoat} onDepart={handleDeparture} onMoveToDryDock={handleMoveToDryDock} onClose={() => setSelectedMooring(null)}/>
                 ) : (
                 <div className="bg-white rounded-2xl border p-8 text-center text-slate-300 border-dashed border-2 flex flex-col items-center justify-center h-48 lg:h-full">
-                  <Anchor size={32} className="opacity-10 mb-2"/>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em]">Gestión de Amarre</p>
-                  <p className="text-[9px] text-slate-400 mt-2">Seleccione una plaza en el plano para editar</p>
+                  <Anchor size={32} className="opacity-10 mb-2"/><p className="text-[10px] font-black uppercase tracking-[0.2em]">Gestión de Amarre</p><p className="text-[9px] text-slate-400 mt-2">Seleccione una plaza en el plano para editar</p>
                 </div>
                 )}
               </div>
-              
               <div className="bg-slate-900 rounded-2xl p-6 text-white shadow-xl shrink-0 relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-4 opacity-5"><RefreshCw size={80} className="rotate-12" /></div>
                 <h3 className="text-[10px] font-black uppercase text-slate-500 mb-4 tracking-widest">Resumen General</h3>
