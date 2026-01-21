@@ -27,7 +27,8 @@ const PrintableMap: React.FC<PrintableMapProps> = ({ moorings, onClose }) => {
   };
 
   const isHeadMooring = (id: string) => {
-    return id.endsWith('G') || id === 'P2/26C' || id.includes('P3/35');
+    // Reconocer cabeceras por el sufijo G (P1/26G, P2/25G, P3/35G)
+    return id.endsWith('G');
   };
 
   const handlePrint = () => {

@@ -61,7 +61,8 @@ const getUniqueData = (index: number) => {
 
 // Helper para identificar plazas de cabecera (Martillo)
 export const isHeadMooring = (id: string) => {
-  return id.endsWith('G') || id === 'P2/26C' || id.includes('P3/35');
+  // Identificamos cabeceras por el sufijo G (P1/26G, P2/25G, P3/35G)
+  return id.endsWith('G');
 };
 
 const generateMoorings = (): Mooring[] => {
@@ -91,18 +92,28 @@ const generateMoorings = (): Mooring[] => {
     let isSingle = specialSingles[idBase] ? true : false;
     let customFinger: 'TOP' | 'BOTTOM' | 'BOTH' | 'NONE' | undefined = undefined;
 
+    // PATRÓN P1 LADO IMPAR (3 a 25): Pares de pozo (3-5, 7-9, etc.)
+    // i=3 (TOP), i=5 (BOTTOM) -> Pozo entre 3 y 5
+    // i=7 (TOP), i=9 (BOTTOM) -> Pozo entre 7 y 9
+    if (prefix === 'P1' && i % 2 !== 0 && i >= 3) {
+        const seqIndex = (i - 3) / 2;
+        if (seqIndex % 2 === 0) customFinger = 'TOP'; // 3, 7, 11...
+        else customFinger = 'BOTTOM'; // 5, 9, 13...
+    }
+
     if (idBase === 'P1/1') { isSingle = true; customFinger = 'BOTTOM'; }
     if (idBase === 'P1/2') { isSingle = true; customFinger = 'TOP'; }
-    
-    // CAMBIO: P1/3C solo tiene finger por el lado de P1/1C (lado superior visualmente)
-    if (idBase === 'P1/3') { customFinger = 'TOP'; } 
-    
-    // CAMBIO: P1/23C comparte finger con P1/21C (finger entre ellos)
-    if (idBase === 'P1/23') { customFinger = 'TOP'; }
+    if (idBase === 'P1/3') { customFinger = 'TOP'; } // Asegurar P1/3 TOP
+    if (idBase === 'P1/23') { customFinger = 'TOP'; } // Excepción P1/23
 
     if (idBase === 'P2/1') { isSingle = false; customFinger = 'TOP'; }
     if (idBase === 'P2/3') { customFinger = 'BOTTOM'; }
     if (idBase === 'P2/2') { customFinger = 'BOTTOM'; }
+
+    // CAMBIO: P2/26C y P2/24C hacen pozo (comparten agua)
+    if (idBase === 'P2/24') { customFinger = 'TOP'; }
+    if (idBase === 'P2/26') { customFinger = 'BOTTOM'; }
+
     if (idBase === 'P3/1') { isSingle = true; customFinger = 'BOTTOM'; }
     if (idBase === 'P3/2') { customFinger = 'BOTTOM'; }
     if (zone === 'SUR' && i >= 3 && i % 2 !== 0) {
@@ -118,7 +129,7 @@ const generateMoorings = (): Mooring[] => {
       'B': { l: 8, b: 3.75 }, 
       'C': { l: 10, b: 4.85 },  
       'D': { l: 12, b: 5.15 },  
-      'G': { l: 17, b: 6.5 }
+      'G': { l: 17, b: 6.5 } // MANGA FIJADA A 6.5 METROS
     }[letter] || { l: 10, b: 4.85 };
 
     if (overrideLength !== undefined && overrideBeam !== undefined) {
@@ -298,12 +309,20 @@ const generateMoorings = (): Mooring[] => {
     else createMooring('P1', i, 'NORTE', 'D');
   }
   createMooring('P1', 26, 'NORTE', 'G');
+  
+  // PANTALÁN CENTRAL (P2)
   for (let i = 1; i <= 23; i += 2) {
     if (i === 1) createMooring('P2', i, 'CENTRAL', 'A'); 
     else createMooring('P2', i, 'CENTRAL', 'D');
   }
+  // Nueva Cabecera P2
+  createMooring('P2', 25, 'CENTRAL', 'G'); 
+
   for (let i = 2; i <= 24; i += 2) createMooring('P2', i, 'CENTRAL', 'C');
-  createMooring('P2', 26, 'CENTRAL', 'G');
+  // P2/26 ahora es una plaza normal C, haciendo pozo con P2/24
+  createMooring('P2', 26, 'CENTRAL', 'C');
+
+
   for (let i = 1; i <= 33; i += 2) {
     if (i <= 19) createMooring('P3', i, 'SUR', 'A');
     else createMooring('P3', i, 'SUR', 'B');
