@@ -43,7 +43,9 @@ export interface Boat {
   portOfRegistry?: string;
   skipperId?: string; 
   nationality?: string;
-  isBase?: boolean; 
+  isBase?: boolean;    // Contrato anual / Plaza asignada
+  isMember?: boolean;  // Socio del club (Descuento)
+  isMultihull?: boolean; // Catamarán / Trimarán (Tarifa x1.5 si no es cabecera)
   inDryDock?: boolean;
   maintenanceReason?: 'Mantenimiento' | 'Hibernación';
   maintenanceReturnDate?: string;

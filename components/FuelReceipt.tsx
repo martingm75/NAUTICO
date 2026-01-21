@@ -10,10 +10,14 @@ interface FuelReceiptProps {
 
 const FuelReceipt: React.FC<FuelReceiptProps> = ({ price, liters, onClose }) => {
   const [formData, setFormData] = useState({
-    header1: "Lugar Peirao Novo s/n 15123 G15364623",
-    header2: "CAMARIÑAS",
+    header1: "Lugar Peirao Novo s/n 15123",
+    header2: "CIF: G15364623",
+    header3: "Tlf: 981 73 70 73",
     fecha: new Date().toLocaleDateString('es-ES'),
-    precio: price.toFixed(2),
+    hora: new Date().toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'}),
+    barco: "",
+    dni: "",
+    precio: price.toFixed(3),
     liters: liters.toFixed(2),
     total: (price * liters).toFixed(2),
     footer: "GRACIAS POR SU VISITA"
@@ -53,122 +57,164 @@ const FuelReceipt: React.FC<FuelReceiptProps> = ({ price, liters, onClose }) => 
         </button>
       </div>
 
-      <div className="bg-white w-full max-w-[80mm] min-h-[120mm] p-8 shadow-2xl print:shadow-none print:m-0 font-sans text-black relative">
+      <div className="bg-white w-full max-w-[80mm] min-h-[150mm] p-6 shadow-2xl print:shadow-none print:m-0 font-mono text-black relative flex flex-col items-center">
         
-        {/* LOGO CN CAMARIÑAS (Fiel al PDF) */}
-        <div className="flex flex-col items-center mb-2">
-           <div className="w-48 h-28 mb-1">
-              <svg viewBox="0 0 240 140" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                {/* Mástil */}
-                <line x1="60" y1="20" x2="60" y2="120" stroke="#334155" strokeWidth="6" strokeLinecap="round" />
-                
-                {/* Cuerpo de la bandera (Forma dinámica) */}
-                <path d="M60 25 C 100 20, 140 30, 180 25 L 210 55 L 180 85 C 140 80, 100 90, 60 85 Z" fill="white" stroke="#1e293b" strokeWidth="2" />
-                
-                {/* Triángulo azul (Punta de la bandera) */}
-                <path d="M160 27 C 180 26, 195 25, 210 55 L 180 85 C 170 84, 165 83, 160 83 L 175 55 Z" fill="#1d4ed8" />
+        {/* LOGO CN CAMARIÑAS CORREGIDO (Vector Geométrico) */}
+        <div className="w-full flex flex-col items-center mb-4">
+           {/* Contenedor del Logo */}
+           <div className="w-32 h-20 mb-3">
+              <svg viewBox="0 0 300 180" className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                {/* Definiciones para recorte y sombra */}
+                <defs>
+                  <filter id="flagShadow" x="-10%" y="-10%" width="120%" height="120%">
+                    <feDropShadow dx="0" dy="1" stdDeviation="1" floodOpacity="0.1"/>
+                  </filter>
+                  <clipPath id="flagClip">
+                     <path d="M 10 10 L 290 90 L 10 170 Z" />
+                  </clipPath>
+                </defs>
 
-                {/* Rueda/Timón Rojo (Estilo PDF) */}
-                <g transform="translate(100, 48) scale(1.1)">
-                   <circle cx="0" cy="0" r="14" fill="none" stroke="#ef4444" strokeWidth="2.5" />
-                   <circle cx="0" cy="0" r="3.5" fill="#ef4444" />
-                   {[...Array(8)].map((_, i) => (
-                      <line 
-                        key={i} 
-                        x1="0" y1="0" 
-                        x2={16 * Math.cos((i * 45) * Math.PI / 180)} 
-                        y2={16 * Math.sin((i * 45) * Math.PI / 180)} 
-                        stroke="#ef4444" 
-                        strokeWidth="2.5" 
-                      />
-                   ))}
+                {/* Fondo del Banderín (Triángulo Blanco) */}
+                <path d="M 10 10 L 290 90 L 10 170 Z" fill="#ffffff" stroke="#1e293b" strokeWidth="2" filter="url(#flagShadow)" />
+
+                {/* Cruz Azul - Recortada a la forma del banderín */}
+                <g clipPath="url(#flagClip)">
+                   {/* Barra Vertical */}
+                   <rect x="80" y="0" width="40" height="180" fill="#2563eb" />
+                   {/* Barra Horizontal */}
+                   <rect x="0" y="70" width="300" height="40" fill="#2563eb" />
                 </g>
-
-                {/* Ondas azules abajo (Estilo PDF) */}
-                <g transform="translate(75, 75)">
-                  <path d="M0 0 Q 15 -8, 30 0 T 60 0 T 90 0" fill="none" stroke="#1d4ed8" strokeWidth="2.5" strokeLinecap="round" />
-                  <path d="M0 6 Q 15 -2, 30 6 T 60 6 T 90 6" fill="none" stroke="#1d4ed8" strokeWidth="2.5" strokeLinecap="round" />
+                
+                {/* Timón Rojo en la intersección */}
+                <g transform="translate(100, 90)">
+                   {/* Aro exterior */}
+                   <circle r="22" fill="none" stroke="#dc2626" strokeWidth="6" />
+                   {/* Centro */}
+                   <circle r="6" fill="#dc2626" />
+                   {/* Radios */}
+                   <g stroke="#dc2626" strokeWidth="5" strokeLinecap="round">
+                     <line x1="0" y1="-30" x2="0" y2="30" />
+                     <line x1="-30" y1="0" x2="30" y2="0" />
+                     <line x1="-21" y1="-21" x2="21" y2="21" />
+                     <line x1="21" y1="-21" x2="-21" y2="21" />
+                   </g>
+                   {/* Empuñaduras del timón */}
+                   <circle cx="0" cy="-34" r="3" fill="#dc2626" />
+                   <circle cx="0" cy="34" r="3" fill="#dc2626" />
+                   <circle cx="-34" cy="0" r="3" fill="#dc2626" />
+                   <circle cx="34" cy="0" r="3" fill="#dc2626" />
                 </g>
               </svg>
            </div>
            
-           <h1 className="text-xl font-black tracking-tighter uppercase mb-2">CNCAMARIÑAS</h1>
+           <h1 className="text-lg font-black tracking-tight uppercase leading-none mt-1">C.N. CAMARIÑAS</h1>
            
-           <input 
-              name="header1"
-              value={formData.header1}
-              onChange={handleInputChange}
-              className="text-[10px] text-center w-full bg-transparent border-none outline-none font-bold text-slate-700"
-           />
-           <input 
-              name="header2"
-              value={formData.header2}
-              onChange={handleInputChange}
-              className="text-[10px] text-center w-full bg-transparent border-none outline-none font-bold uppercase mb-2 text-slate-700"
-           />
-           
-           <div className="w-full text-center text-[10px] mb-6 font-bold text-slate-400">
-             --------------------------------------------------
+           <div className="text-[9px] text-center w-full font-bold text-slate-600 mt-2 space-y-0.5">
+             <input name="header1" value={formData.header1} onChange={handleInputChange} className="w-full text-center bg-transparent border-none outline-none p-0"/>
+             <input name="header2" value={formData.header2} onChange={handleInputChange} className="w-full text-center bg-transparent border-none outline-none p-0"/>
+             <input name="header3" value={formData.header3} onChange={handleInputChange} className="w-full text-center bg-transparent border-none outline-none p-0"/>
            </div>
+           
+           <div className="w-full border-b border-dashed border-slate-400 my-4"></div>
         </div>
 
-        {/* CUERPO DEL RECIBO (Fiel al layout del PDF) */}
-        <div className="space-y-6 text-sm font-bold">
-          <div className="flex items-center gap-2">
-            <label className="shrink-0">Fecha:</label>
+        {/* DETALLES DEL TICKET */}
+        <div className="w-full space-y-3 text-xs font-bold leading-relaxed">
+          <div className="flex justify-between">
+            <span>FECHA: {formData.fecha}</span>
+            <span>HORA: {formData.hora}</span>
+          </div>
+
+          <div className="flex flex-col">
+            <label className="text-[9px] text-slate-500 uppercase">Embarcación / Vessel</label>
             <input 
-              name="fecha"
-              value={formData.fecha} 
+              name="barco"
+              value={formData.barco} 
               onChange={handleInputChange}
-              className="flex-1 bg-transparent border-none outline-none font-black text-black" 
+              placeholder="NOMBRE BARCO"
+              className="w-full bg-slate-50 border-b border-slate-300 outline-none uppercase py-1" 
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <label className="shrink-0">Precio combustible:</label>
-            <div className="flex items-center">
-              <input 
-                name="precio"
-                value={formData.precio} 
-                onChange={handleInputChange}
-                className="w-16 bg-transparent border-none outline-none font-black text-black text-right" 
-              />
-              <span className="ml-1">€/l.</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="shrink-0">Litros repostados:</label>
+          <div className="flex flex-col">
+            <label className="text-[9px] text-slate-500 uppercase">Cliente / Customer ID</label>
             <input 
-              name="liters"
-              value={formData.liters} 
+              name="dni"
+              value={formData.dni} 
               onChange={handleInputChange}
-              className="flex-1 bg-transparent border-none outline-none font-black text-black" 
+              placeholder="DNI / PASAPORTE / CIF"
+              className="w-full bg-slate-50 border-b border-slate-300 outline-none uppercase py-1" 
             />
           </div>
 
-          <div className="pt-8 flex items-baseline gap-4">
-            <span className="text-xl font-black uppercase tracking-tighter">TOTAL:</span>
-            <div className="flex-1 flex items-baseline gap-1 border-b-2 border-black pb-1">
-              <input 
-                name="total"
-                value={formData.total} 
-                onChange={handleInputChange}
-                className="text-4xl font-black outline-none w-full bg-transparent border-none text-right" 
-              />
-              <span className="text-2xl font-black">€</span>
+          <div className="w-full border-b border-dashed border-slate-400 my-2 pt-2"></div>
+
+          <table className="w-full text-right">
+             <tbody>
+               <tr>
+                 <td className="text-left py-1">Producto</td>
+                 <td className="py-1">Gasoleo B</td>
+               </tr>
+               <tr>
+                 <td className="text-left py-1">Precio/L</td>
+                 <td className="py-1">
+                   <input 
+                     name="precio"
+                     value={formData.precio} 
+                     onChange={handleInputChange}
+                     className="w-16 text-right bg-transparent outline-none" 
+                   /> €
+                 </td>
+               </tr>
+               <tr>
+                 <td className="text-left py-1">Volumen</td>
+                 <td className="py-1">
+                    <input 
+                      name="liters"
+                      value={formData.liters} 
+                      onChange={handleInputChange}
+                      className="w-16 text-right bg-transparent outline-none" 
+                    /> L
+                 </td>
+               </tr>
+             </tbody>
+          </table>
+
+          <div className="w-full border-b border-black my-2"></div>
+
+          <div className="flex justify-between items-end text-lg font-black mt-2">
+            <span>TOTAL</span>
+            <div className="flex items-baseline">
+               <input 
+                 name="total"
+                 value={formData.total} 
+                 onChange={handleInputChange}
+                 className="w-24 text-right bg-transparent outline-none" 
+               />
+               <span>€</span>
             </div>
           </div>
         </div>
 
-        {/* FOOTER */}
-        <div className="mt-20 text-center">
+        {/* PIE DE PÁGINA */}
+        <div className="w-full mt-auto pt-8 text-center">
+          <p className="text-[10px] font-bold">IVA INCLUIDO</p>
           <input 
             name="footer"
             value={formData.footer}
             onChange={handleInputChange}
-            className="text-sm font-black text-center w-full bg-transparent border-none outline-none uppercase tracking-widest"
+            className="text-[10px] text-center w-full bg-transparent border-none outline-none uppercase mt-1"
           />
+          <div className="mt-4 flex justify-center opacity-80">
+             <svg className="w-full h-8 max-w-[200px]" viewBox="0 0 100 20">
+                <rect x="0" y="0" width="10" height="20" fill="black"/>
+                <rect x="15" y="0" width="5" height="20" fill="black"/>
+                <rect x="25" y="0" width="15" height="20" fill="black"/>
+                <rect x="45" y="0" width="8" height="20" fill="black"/>
+                <rect x="58" y="0" width="20" height="20" fill="black"/>
+                <rect x="85" y="0" width="10" height="20" fill="black"/>
+             </svg>
+          </div>
         </div>
 
       </div>
@@ -197,6 +243,9 @@ const FuelReceipt: React.FC<FuelReceiptProps> = ({ price, liters, onClose }) => 
           input::-webkit-inner-spin-button {
             -webkit-appearance: none;
             margin: 0;
+          }
+          ::placeholder {
+            color: transparent !important;
           }
         }
       `}</style>

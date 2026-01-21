@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Boat, Mooring, MooringStatus } from '../types';
 import { FLAG_ISO_MAP } from '../constants';
-import { Search, Plus, User, Ruler, Ship, Save, X, Trash2, Anchor, History, Compass, Container, Waves, Calendar, Clock, Phone, Mail, CreditCard, FileText, Snowflake, Wrench, RefreshCw } from 'lucide-react';
+import { Search, Plus, User, Ruler, Ship, Save, X, Trash2, Anchor, History, Compass, Container, Waves, Calendar, Clock, Phone, Mail, CreditCard, FileText, Snowflake, Wrench, RefreshCw, BadgePercent, Combine } from 'lucide-react';
 import PrintableMap from './PrintableMap';
 import DeclarationForm from './DeclarationForm';
 
@@ -39,7 +39,7 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
   const [formData, setFormData] = useState<Boat>({
     id: '', name: '', owner: '', phone: '', email: '', length: 0, beam: 0, registration: '',
     flag: 'España', flagCode: 'es', portOfRegistry: '', skipperId: '', nationality: '',
-    arrivalDate: '', departureDate: '', isBase: false, inDryDock: false, passengers: [], history: []
+    arrivalDate: '', departureDate: '', isBase: false, isMember: false, isMultihull: false, inDryDock: false, passengers: [], history: []
   });
 
   const filteredRegistry = useMemo(() => {
@@ -86,7 +86,7 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
       setFormData({
         id: Date.now().toString(), name: '', owner: '', phone: '', email: '', length: 0, beam: 0, registration: '',
         flag: 'España', flagCode: 'es', portOfRegistry: '', skipperId: '', nationality: '',
-        arrivalDate: new Date().toISOString().split('T')[0], departureDate: '', isBase: activeTab.includes('base'), inDryDock: activeTab === 'dry_dock',
+        arrivalDate: new Date().toISOString().split('T')[0], departureDate: '', isBase: activeTab.includes('base'), isMember: false, isMultihull: false, inDryDock: activeTab === 'dry_dock',
         passengers: [], history: []
       });
     }
@@ -124,7 +124,6 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
   // Función wrapper para botadura inteligente
   const handleLaunch = (boat: Boat) => {
       // Si tiene titular y está libre/reservada para él, pasar el ID directamente
-      // App.tsx manejará la lógica, pero aquí podemos pre-validar
       if (boat.titularMooringId) {
           const m = moorings.find(m => m.id === boat.titularMooringId);
           if (m && (m.status === MooringStatus.AVAILABLE || (m.status === MooringStatus.RESERVED && m.reservation?.relatedBoatId === boat.id))) {
@@ -209,6 +208,20 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                   }`}>
                     {boat.maintenanceReason === 'Hibernación' ? <Snowflake size={10} /> : <Wrench size={10} />}
                     {boat.maintenanceReason || 'MANTENIMIENTO'}
+                  </div>
+                )}
+
+                {/* ETIQUETA MULTICASCO */}
+                {boat.isMultihull && (
+                  <div className={`absolute top-0 left-0 p-1 px-2 text-[8px] font-black uppercase flex items-center gap-1 bg-violet-100 text-violet-700 ${boat.isMember || boat.inDryDock ? 'ml-16' : ''}`}>
+                    <Combine size={10} /> MULTI
+                  </div>
+                )}
+
+                {/* ETIQUETA SOCIO */}
+                {boat.isMember && !boat.inDryDock && (
+                  <div className="absolute top-0 left-0 p-1 px-2 text-[8px] font-black uppercase flex items-center gap-1 bg-sky-100 text-sky-700">
+                    <BadgePercent size={10} /> SOCIO
                   </div>
                 )}
                 
@@ -302,6 +315,28 @@ const RegistryManager: React.FC<RegistryManagerProps> = ({
                       </div>
                     </div>
                     
+                    {/* TOGGLE SOCIO */}
+                    <div className="pt-2">
+                       <label className="flex items-center gap-2 cursor-pointer bg-sky-50 p-3 rounded-xl border border-sky-100">
+                          <input type="checkbox" name="isMember" checked={formData.isMember} onChange={handleChange} className="w-4 h-4 text-sky-600 rounded focus:ring-sky-500" />
+                          <div>
+                            <span className="block text-[10px] font-black text-sky-700 uppercase">Socio del Club</span>
+                            <span className="block text-[8px] text-sky-500 font-bold uppercase">-10% Descuento</span>
+                          </div>
+                       </label>
+                    </div>
+
+                    {/* TOGGLE MULTICASCO */}
+                    <div className="pt-2">
+                       <label className="flex items-center gap-2 cursor-pointer bg-violet-50 p-3 rounded-xl border border-violet-100">
+                          <input type="checkbox" name="isMultihull" checked={formData.isMultihull} onChange={handleChange} className="w-4 h-4 text-violet-600 rounded focus:ring-violet-500" />
+                          <div>
+                            <span className="block text-[10px] font-black text-violet-700 uppercase">Multicasco (Catamarán/Trimarán)</span>
+                            <span className="block text-[8px] text-violet-500 font-bold uppercase">Tarifa x1.5 (Excepto en Cabecera)</span>
+                          </div>
+                       </label>
+                    </div>
+
                     {/* TOGGLE MARINA SECA */}
                     <div className="pt-2">
                        <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-100">

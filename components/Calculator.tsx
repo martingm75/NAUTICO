@@ -1,6 +1,13 @@
 
 import React, { useState } from 'react';
 
+interface ButtonProps {
+  children: React.ReactNode;
+  onClick: () => void;
+  className?: string;
+  variant?: 'number' | 'operator' | 'action' | 'clear';
+}
+
 const Calculator: React.FC = () => {
   const [display, setDisplay] = useState('0');
   const [equation, setEquation] = useState('');
@@ -38,9 +45,9 @@ const Calculator: React.FC = () => {
     setEquation('');
   };
 
-  const Button = ({ children, onClick, className = '', variant = 'number' }: any) => {
+  const Button: React.FC<ButtonProps> = ({ children, onClick, className = '', variant = 'number' }) => {
     const baseClasses = "h-14 rounded-2xl text-lg font-bold transition-all active:scale-95 flex items-center justify-center";
-    const variants: any = {
+    const variants = {
       number: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 shadow-sm",
       operator: "bg-sky-50 text-sky-600 border border-sky-100 hover:bg-sky-100",
       action: "bg-slate-900 text-white hover:bg-black col-span-2",

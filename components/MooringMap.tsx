@@ -6,7 +6,7 @@ import { Maximize, Info, X, Printer } from 'lucide-react';
 
 interface MooringMapProps {
   moorings: Mooring[];
-  onSelectMooring: (mooring: Mooring) => void;
+  onSelectMooring: (mooring: Mooring | null) => void;
   selectedId: string | null;
   transitingBoat?: { boat: Boat; sourceId: string; targetId: string } | null;
   onAnimationComplete?: (targetId: string, boat: Boat) => void;
@@ -490,8 +490,45 @@ const MooringMap: React.FC<MooringMapProps> = ({
 
   // --- Renderizado de Iconos ---
 
-  const BoatIcon = ({ width, height, isBase = false }: { width: number, height: number, isBase?: boolean }) => {
+  const BoatIcon = ({ width, height, isBase = false, isMultihull = false }: { width: number, height: number, isBase?: boolean, isMultihull?: boolean }) => {
     const boatColor = isBase ? MAP_BASE_BOAT_COLOR : MAP_TRANSIT_BOAT_COLOR;
+
+    if (isMultihull) {
+        // RENDERIZADO CATAMARÁN (Doble casco)
+        const hullWidth = width * 0.3; // Cada casco es el 30% del ancho total
+        const gap = width * 0.4;       // Espacio entre cascos
+        const trampolineWidth = width * 0.5;
+
+        return (
+            <g>
+                {/* Sombra General */}
+                <path d={`M ${hullWidth*0.5} ${height} L ${hullWidth*0.05} ${height*0.75} Q ${hullWidth*0.05} ${height*0.2}, ${hullWidth*0.5} 0 Q ${hullWidth*0.95} ${height*0.2}, ${hullWidth*0.95} ${height*0.75} Z`} fill="black" fillOpacity="0.2" transform="translate(10, 10)"/>
+                <path d={`M ${width - hullWidth*0.5} ${height} L ${width - hullWidth*0.95} ${height*0.75} Q ${width - hullWidth*0.95} ${height*0.2}, ${width - hullWidth*0.5} 0 Q ${width - hullWidth*0.05} ${height*0.2}, ${width - hullWidth*0.05} ${height*0.75} Z`} fill="black" fillOpacity="0.2" transform="translate(10, 10)"/>
+
+                {/* Trampolín / Red Central */}
+                <rect x={(width - trampolineWidth)/2} y={height*0.1} width={trampolineWidth} height={height*0.6} fill="#334155" fillOpacity="0.8" rx="5" />
+                <line x1={(width - trampolineWidth)/2} y1={height*0.2} x2={(width + trampolineWidth)/2} y2={height*0.2} stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                <line x1={(width - trampolineWidth)/2} y1={height*0.4} x2={(width + trampolineWidth)/2} y2={height*0.4} stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+                <line x1={(width - trampolineWidth)/2} y1={height*0.6} x2={(width + trampolineWidth)/2} y2={height*0.6} stroke="rgba(255,255,255,0.3)" strokeWidth="2" />
+
+                {/* Casco Izquierdo */}
+                <path d={`M ${hullWidth*0.5} ${height} L 0 ${height*0.75} Q 0 ${height*0.12}, ${hullWidth*0.5} 0 Q ${hullWidth} ${height*0.12}, ${hullWidth} ${height*0.75} Z`} fill="#ffffff" stroke="#94a3b8" strokeWidth="2" />
+                <path d={`M ${hullWidth*0.5} ${height*0.96} L ${hullWidth*0.1} ${height*0.72} Q ${hullWidth*0.1} ${height*0.2}, ${hullWidth*0.5} ${height*0.1} Q ${hullWidth*0.9} ${height*0.2}, ${hullWidth*0.9} ${height*0.72} Z`} fill={boatColor} />
+
+                {/* Casco Derecho */}
+                <g transform={`translate(${width - hullWidth}, 0)`}>
+                    <path d={`M ${hullWidth*0.5} ${height} L 0 ${height*0.75} Q 0 ${height*0.12}, ${hullWidth*0.5} 0 Q ${hullWidth} ${height*0.12}, ${hullWidth} ${height*0.75} Z`} fill="#ffffff" stroke="#94a3b8" strokeWidth="2" />
+                    <path d={`M ${hullWidth*0.5} ${height*0.96} L ${hullWidth*0.1} ${height*0.72} Q ${hullWidth*0.1} ${height*0.2}, ${hullWidth*0.5} ${height*0.1} Q ${hullWidth*0.9} ${height*0.2}, ${hullWidth*0.9} ${height*0.72} Z`} fill={boatColor} />
+                </g>
+
+                {/* Cabina Central */}
+                <rect x={width*0.25} y={height*0.55} width={width*0.5} height={height*0.25} fill="white" rx="10" stroke="#cbd5e1" strokeWidth="2"/>
+                <rect x={width*0.3} y={height*0.6} width={width*0.4} height={height*0.15} fill={boatColor} fillOpacity="0.5" rx="5"/>
+            </g>
+        );
+    }
+
+    // MONOCASCO (Estándar)
     return (
       <g>
         <path d={`M ${width*0.5} ${height} L ${width*0.05} ${height*0.75} Q ${width*0.05} ${height*0.2}, ${width*0.5} 0 Q ${width*0.95} ${height*0.2}, ${width*0.95} ${height*0.75} Z`} fill="black" fillOpacity="0.2" transform="translate(10, 10)"/>
@@ -499,7 +536,6 @@ const MooringMap: React.FC<MooringMapProps> = ({
         <path d={`M ${width*0.5} ${height*0.96} L ${width*0.1} ${height*0.72} Q ${width*0.1} ${height*0.2}, ${width*0.5} ${height*0.1} Q ${width*0.9} ${height*0.2}, ${width*0.9} ${height*0.72} Z`} fill={boatColor} />
         <path d={`M ${width*0.25} ${height*0.65} L ${width*0.75} ${height*0.65} L ${width*0.8} ${height*0.45} Q ${width*0.5} ${height*0.35}, ${width*0.2} ${height*0.45} Z`} fill="white" fillOpacity="0.8" />
         <rect x={width*0.35} y={height*0.7} width={width*0.3} height={height*0.18} rx={width*0.03} fill="white" fillOpacity="0.3" />
-        {/* Cleat/Cornamusa en proa para que el cabo salga de algo físico */}
         <circle cx={width*0.5} cy={height*0.05} r={width*0.04} fill="#cbd5e1" stroke="#475569" strokeWidth="2" />
       </g>
     );
@@ -656,7 +692,13 @@ const MooringMap: React.FC<MooringMapProps> = ({
       }
 
       const slotStroke = isSelected ? "white" : "rgba(255,255,255,0.3)";
-      const boatBeam = h * 0.8;
+      
+      // Ajuste para MULTICASCO: Si es multicasco y NO es cabecera, ocupa visualmente casi 2 plazas (ancho x1.6)
+      let boatBeam = h * 0.8;
+      if (m.boat?.isMultihull && !isHeadMooring(m.id)) {
+          boatBeam = h * 1.6;
+      }
+
       const boatLength = w * 0.85;
       const rotation = isRight ? -90 : 90;
 
@@ -688,7 +730,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
             <rect x={xWater} y={y} width={w} height={h} fill={slotFill} stroke={slotStroke} strokeWidth={isSelected ? "15" : "3"} rx="10" />
             {m.boat && (
               <g transform={`translate(${centerX}, ${centerY}) rotate(${rotation}) translate(${-boatBeam/2}, ${-boatLength/2})`} style={{ pointerEvents: 'none' }}>
-                <BoatIcon width={boatBeam} height={boatLength} isBase={m.boat.isBase} />
+                <BoatIcon width={boatBeam} height={boatLength} isBase={m.boat.isBase} isMultihull={m.boat.isMultihull} />
               </g>
             )}
             <g transform={`translate(${centerX}, ${centerY}) rotate(180)`} style={{ pointerEvents: 'none' }}>
@@ -734,7 +776,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
               <rect x={-hammerConcreteWidth / 2} y={hammerHeight + 20} width={hammerConcreteWidth} height={280} fill={headSlotFill} stroke={selectedId === headMooring.id ? "white" : "rgba(255,255,255,0.3)"} strokeWidth={10} rx="40" />
               {headMooring.boat && (
                 <g transform={`translate(0, ${hammerHeight + 20 + 140}) rotate(90) translate(${-headBoatBeam/2}, ${-headBoatLength/2})`} style={{ pointerEvents: 'none' }}>
-                   <BoatIcon width={headBoatBeam} height={headBoatLength} isBase={headMooring.boat.isBase} />
+                   <BoatIcon width={headBoatBeam} height={headBoatLength} isBase={headMooring.boat.isBase} isMultihull={headMooring.boat.isMultihull} />
                 </g>
               )}
               <g transform={`translate(0, ${hammerHeight + 160}) rotate(180)`} style={{ pointerEvents: 'none' }}>
@@ -771,7 +813,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
           transformOrigin: '0 0',
         }}
       >
-        <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} width={SVG_WIDTH} height={SVG_HEIGHT} xmlns="http://www.w3.org/2000/svg" onClick={() => onSelectMooring(null as any)}>
+        <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} width={SVG_WIDTH} height={SVG_HEIGHT} xmlns="http://www.w3.org/2000/svg" onClick={() => onSelectMooring(null)}>
           <defs>
             <pattern id="water-pattern-1" x="0" y="0" width="3000" height="3000" patternUnits="userSpaceOnUse">
                <path d="M0 1500 Q 750 1200, 1500 1500 T 3000 1500" fill="none" stroke="white" strokeWidth="20" opacity="0.15" />
@@ -814,7 +856,7 @@ const MooringMap: React.FC<MooringMapProps> = ({
             {animPos && transitingBoat && (
               <g transform={`translate(${animPos.x}, ${animPos.y}) rotate(${animPos.rotation})`}>
                 <g transform="translate(-150, -325)">
-                   <BoatIcon width={300} height={650} isBase={transitingBoat.boat.isBase} />
+                   <BoatIcon width={300} height={650} isBase={transitingBoat.boat.isBase} isMultihull={transitingBoat.boat.isMultihull} />
                 </g>
               </g>
             )}

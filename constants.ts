@@ -10,24 +10,59 @@ const FLAGS = [
   { name: 'Alemania', code: 'de' },
   { name: 'Irlanda', code: 'ie' },
   { name: 'Polonia', code: 'pl' },
-  { name: 'Grecia', code: 'gr' }
+  { name: 'Grecia', code: 'gr' },
+  { name: 'Italia', code: 'it' },
+  { name: 'Suecia', code: 'se' },
+  { name: 'Noruega', code: 'no' },
+  { name: 'Bélgica', code: 'be' },
+  { name: 'Países Bajos', code: 'nl' }
 ];
 
 const BOAT_NAMES = [
   'Sea Breeze', 'Galerna', 'Albatros', 'Poseidón', 'Mare Nostrum', 'Eolo', 'Sirena del Mar', 'Orca II', 
   'Nereida', 'Odisea', 'Mar de Fondo', 'Estrella Polar', 'Viento del Sur', 'Libertad', 'Amanecer', 
   'Delfín Solitario', 'Vikingo', 'Bahía Azul', 'Cormorán', 'Tempestad', 'Calma Chicha', 'Corsario',
-  'Azul Profundo', 'Nautilus', 'Boreal', 'Aventurero', 'Horizonte', 'Marea Alta'
+  'Azul Profundo', 'Nautilus', 'Boreal', 'Aventurero', 'Horizonte', 'Marea Alta', 'Brisa Marina',
+  'Rayo Verde', 'Capitán Nemo', 'Lobo de Mar', 'Espuma Blanca', 'Siroco', 'Mistral', 'Tramontana',
+  'Levante', 'Poniente', 'Acuario', 'Piscis', 'Andrómeda', 'Casiopea', 'Orion', 'Pegaso',
+  'Argonauta', 'Calipso', 'Tritón', 'Neptuno', 'Atlántida', 'Pacífico', 'Mediterráneo', 'Cantábrico',
+  'Ítaca', 'Troya', 'Esparta', 'Atenas', 'Roma', 'Cartago', 'Fenicia', 'Vikingo II',
+  'Drakkar', 'Galeón', 'Fragata', 'Goleta', 'Bergantín', 'Carabela', 'Naos', 'Santa María',
+  'Pinta', 'Niña', 'Victoria', 'Trinidad', 'Concepción', 'San Antonio', 'Santiago', 'San Cristóbal',
+  'Fortuna', 'Destino', 'Esperanza', 'Gloria', 'Victoria', 'Fama', 'Honor', 'Valor',
+  'Audaz', 'Intrépido', 'Valiente', 'Guerrero', 'Defensor', 'Protector', 'Guardián', 'Vigía'
 ];
 
 const OWNER_NAMES = [
   'Juan Pérez García', 'Marta Rodríguez Ruiz', 'Pierre Dubois', 'Hans Müller', 'Elena García Santos', 
   'Luigi Verdi', 'Antonio Da Silva', 'Robert Smith', 'Krzysztof Nowak', 'Giorgos Papadopoulos',
   'Carmen Lema Varela', 'Santiago Martínez', 'Isabel Castro', 'Francisco Javier Sordo',
-  'Ana Belén López', 'Miguel Ángel Torres', 'Laura Díaz', 'Carlos Ruiz'
+  'Ana Belén López', 'Miguel Ángel Torres', 'Laura Díaz', 'Carlos Ruiz', 'John Doe', 'Jane Smith',
+  'Michael Johnson', 'Emily Davis', 'David Wilson', 'Sarah Brown', 'James Taylor', 'Jessica Anderson',
+  'William Thomas', 'Elizabeth Jackson', 'Richard White', 'Karen Harris', 'Joseph Martin', 'Nancy Thompson',
+  'Thomas Garcia', 'Lisa Martinez', 'Charles Robinson', 'Betty Clark', 'Christopher Rodriguez', 'Sandra Lewis',
+  'Daniel Lee', 'Ashley Walker', 'Matthew Hall', 'Kimberly Allen', 'Anthony Young', 'Donna Hernandez',
+  'Donald King', 'Michelle Wright', 'Paul Lopez', 'Carol Hill', 'Mark Scott', 'Jennifer Green',
+  'George Adams', 'Amanda Baker', 'Kenneth Gonzalez', 'Melissa Nelson', 'Steven Carter', 'Stephanie Mitchell',
+  'Edward Perez', 'Rebecca Roberts', 'Brian Turner', 'Sharon Phillips', 'Ronald Campbell', 'Cynthia Parker',
+  'Kevin Evans', 'Kathleen Edwards', 'Jason Collins', 'Amy Stewart', 'Jeffrey Sanchez', 'Shirley Morris',
+  'Ryan Rogers', 'Angela Reed', 'Jacob Cook', 'Helen Morgan', 'Gary Bell', 'Deborah Murphy',
+  'Nicholas Bailey', 'Janet Rivera', 'Eric Cooper', 'Maria Richardson', 'Stephen Cox', 'Heather Howard'
 ];
 
-const REG_PROVINCES = ['CO', 'VI', 'SS', 'BA', 'MA', 'AL', 'GC'];
+const REG_PROVINCES = ['CO', 'VI', 'SS', 'BA', 'MA', 'AL', 'GC', 'FE', 'TE', 'HU', 'PM'];
+
+// Función auxiliar para obtener datos únicos secuenciales
+const getUniqueData = (index: number) => {
+  const boatName = BOAT_NAMES[index % BOAT_NAMES.length] + (index >= BOAT_NAMES.length ? ` ${Math.floor(index/BOAT_NAMES.length) + 1}` : '');
+  const ownerName = OWNER_NAMES[index % OWNER_NAMES.length] + (index >= OWNER_NAMES.length ? ` ${Math.floor(index/OWNER_NAMES.length) + 1}` : '');
+  return { boatName, ownerName };
+};
+
+// Helper para identificar plazas de cabecera (Martillo)
+export const isHeadMooring = (id: string) => {
+  return id.endsWith('G') || id === 'P2/26C' || id.includes('P3/35');
+};
 
 const generateMoorings = (): Mooring[] => {
   const moorings: Mooring[] = [];
@@ -56,13 +91,15 @@ const generateMoorings = (): Mooring[] => {
     let isSingle = specialSingles[idBase] ? true : false;
     let customFinger: 'TOP' | 'BOTTOM' | 'BOTH' | 'NONE' | undefined = undefined;
 
-    // MODIFICADO: P1/1 (P1/1C) ahora saca finger por abajo para usar el "otro"
     if (idBase === 'P1/1') { isSingle = true; customFinger = 'BOTTOM'; }
-    
     if (idBase === 'P1/2') { isSingle = true; customFinger = 'TOP'; }
-    // P1/3 configurado con finger SOLO ABAJO para que no dibuje finger arriba (que sería el de abajo de P1/1)
-    if (idBase === 'P1/3') { customFinger = 'BOTTOM'; }
     
+    // CAMBIO: P1/3C solo tiene finger por el lado de P1/1C (lado superior visualmente)
+    if (idBase === 'P1/3') { customFinger = 'TOP'; } 
+    
+    // CAMBIO: P1/23C comparte finger con P1/21C (finger entre ellos)
+    if (idBase === 'P1/23') { customFinger = 'TOP'; }
+
     if (idBase === 'P2/1') { isSingle = false; customFinger = 'TOP'; }
     if (idBase === 'P2/3') { customFinger = 'BOTTOM'; }
     if (idBase === 'P2/2') { customFinger = 'BOTTOM'; }
@@ -88,25 +125,17 @@ const generateMoorings = (): Mooring[] => {
       dims = { l: overrideLength, b: overrideBeam };
     }
 
-    // --- GENERACIÓN DE ESTADOS PARA PRUEBAS ---
-    
-    // ESCENARIO 1: Plaza Ocupada Normal
-    // ESCENARIO 2: Plaza Reservada porque el titular está en Mantenimiento/Hibernación
-    // ESCENARIO 3: Plaza Mantenimiento (avería en pantalán)
-    // ESCENARIO 4: Plaza Libre
-
     let status = MooringStatus.AVAILABLE;
     let boat: Boat | undefined = undefined;
     let reservation: Mooring['reservation'] = undefined;
 
-    // Forzamos algunos escenarios específicos para que el usuario pueda probar
+    // --- ESCENARIOS ESPECÍFICOS ---
     if (fullId === 'P1/2B') {
-        // CASO: Titular en Hibernación. Plaza RESERVADA.
+        // CASO: Titular en Hibernación
         status = MooringStatus.RESERVED;
         const titularBoatName = "Invernalia One";
         const titularId = `B-HIB-${globalId}`;
         
-        // El barco NO está en la plaza (boat = undefined), pero creamos la reserva
         reservation = {
             startDate: '2023-11-01',
             endDate: '2024-04-30',
@@ -116,11 +145,6 @@ const generateMoorings = (): Mooring[] => {
             type: 'MAINTENANCE_HOLD'
         };
         
-        // IMPORTANTE: Este barco debe existir en el registro (se añadirá en App.tsx logicamente, 
-        // pero aquí simulamos la plaza. El barco "fantasma" se creará al inicializar el registro si no existe).
-        // Para simplificar, en esta demo, adjuntamos el barco como propiedad oculta para que App lo extraiga, 
-        // o confiamos en que boatRegistry se pueble.
-        // Haremos un truco: asignamos un 'boat' temporal aquí que luego App moverá al registro y quitará del amarre.
         boat = {
              id: titularId,
              name: titularBoatName,
@@ -129,16 +153,19 @@ const generateMoorings = (): Mooring[] => {
              registration: "7ª-BA-2-2020",
              flag: 'Reino Unido', flagCode: 'gb',
              isBase: true,
-             inDryDock: true, // ESTÁ EN SECO
+             isMember: true, 
+             isMultihull: false,
+             inDryDock: true, 
              maintenanceReason: 'Hibernación',
-             titularMooringId: fullId, // TIENE ESTA PLAZA
+             titularMooringId: fullId,
              arrivalDate: '2023-05-01',
              departureDate: '2023-11-01',
-             phone: "+44 7700 900077"
+             phone: "+44 7700 900077",
+             email: "lord.stark@winterfell.net"
         } as Boat;
 
     } else if (fullId === 'P1/4B') {
-         // CASO: Titular en Mantenimiento (reparación). Plaza RESERVADA.
+         // CASO: Titular en Mantenimiento
          status = MooringStatus.RESERVED;
          const titularId = `B-MANT-${globalId}`;
          reservation = {
@@ -157,54 +184,91 @@ const generateMoorings = (): Mooring[] => {
              registration: "7ª-GC-5-2019",
              flag: 'España', flagCode: 'es',
              isBase: true,
+             isMember: false,
+             isMultihull: false,
              inDryDock: true,
              maintenanceReason: 'Mantenimiento',
              titularMooringId: fullId,
              arrivalDate: '2023-01-01',
              departureDate: '2024-02-15',
-             phone: "+34 600 111 222"
+             phone: "+34 600 111 222",
+             email: "taller.manolo@reparaciones.es"
         } as Boat;
+    
+    } else if (fullId === 'P1/10C') {
+         // CASO: Catamarán Ocupando Visualmente más espacio
+         status = MooringStatus.OCCUPIED;
+         boat = {
+             id: `B-MULTI-${globalId}`,
+             name: "Twin Soul",
+             owner: "Carlos Catamarán",
+             length: 9.5, beam: 5.8, // Muy ancho
+             registration: "7ª-VA-1-2023",
+             flag: 'Francia', flagCode: 'fr',
+             isBase: false,
+             isMember: false,
+             isMultihull: true, // MULTICASCO
+             inDryDock: false,
+             arrivalDate: '2024-01-10',
+             departureDate: '',
+             phone: "+33 600 000 000",
+             email: "carlos.cata@mer.fr"
+         } as Boat;
 
     } else {
-        // RESTO ALEATORIO
-        const r = Math.random();
-        if (r < 0.6) status = MooringStatus.OCCUPIED;
-        else if (r < 0.7) status = MooringStatus.RESERVED; // Reserva normal de tránsito
-        else if (r < 0.75) status = MooringStatus.MAINTENANCE; // Avería plaza
+        // Generación pseudo-aleatoria pero DETERMINISTA
+        const stateCycle = globalId % 7;
+        
+        if (stateCycle === 0 || stateCycle === 3) status = MooringStatus.OCCUPIED; // Base
+        else if (stateCycle === 1 || stateCycle === 6) status = MooringStatus.OCCUPIED; // Tránsito
+        else if (stateCycle === 4) status = MooringStatus.RESERVED;
+        else if (stateCycle === 5) status = MooringStatus.MAINTENANCE;
         else status = MooringStatus.AVAILABLE;
 
         if (status === MooringStatus.OCCUPIED) {
-            const randomFlag = FLAGS[Math.floor(Math.random() * FLAGS.length)];
-            const randomBoatName = BOAT_NAMES[Math.floor(Math.random() * BOAT_NAMES.length)];
-            const randomProv = REG_PROVINCES[Math.floor(Math.random() * REG_PROVINCES.length)];
+            const { boatName, ownerName } = getUniqueData(globalId);
+            const randomFlag = FLAGS[globalId % FLAGS.length];
+            const randomProv = REG_PROVINCES[globalId % REG_PROVINCES.length];
+            
+            const nameParts = ownerName.split(' ');
+            const emailUser = `${nameParts[0].toLowerCase()}.${nameParts[1].toLowerCase()}${globalId}`;
+            const domains = ['gmail.com', 'hotmail.com', 'outlook.com', 'yahoo.es', 'icloud.com'];
+            const randomDomain = domains[globalId % domains.length];
+            
+            const isBase = (stateCycle === 0 || stateCycle === 3);
+            const isMember = isBase ? (globalId % 5 !== 0) : false; 
+            
+            // Reducimos la probabilidad aleatoria de multicasco para que destaque el manual
+            const isMultihull = false; 
+
             boat = {
                 id: `B-${globalId}`,
-                name: randomBoatName,
-                owner: OWNER_NAMES[Math.floor(Math.random() * OWNER_NAMES.length)],
-                phone: `+34 6${Math.floor(10000000 + Math.random() * 90000000)}`,
-                email: `${randomBoatName.toLowerCase().replace(/\s/g, '')}@gmail.com`,
-                length: parseFloat(Math.max(dims.l - (Math.random() * 2), 4).toFixed(1)), 
-                beam: parseFloat(Math.max(dims.b - (Math.random() * 1), 2).toFixed(1)),
-                arrivalDate: `2024-${Math.floor(Math.random() * 12 + 1).toString().padStart(2, '0')}-15`,
+                name: boatName,
+                owner: ownerName,
+                phone: `+34 6${(globalId * 123456).toString().slice(-8).padStart(8, '0')}`,
+                email: `${emailUser}@${randomDomain}`,
+                length: parseFloat(Math.max(dims.l - ((globalId % 30) / 10), 4).toFixed(1)), 
+                beam: parseFloat(Math.max(dims.b - ((globalId % 10) / 10), 2).toFixed(1)),
+                arrivalDate: `2024-${((globalId % 12) + 1).toString().padStart(2, '0')}-15`,
                 departureDate: '',
-                registration: `7ª-${randomProv}-${globalId}-${20 + Math.floor(Math.random() * 5)}`,
+                registration: `7ª-${randomProv}-${globalId}-${20 + (globalId % 5)}`,
                 flag: randomFlag.name,
                 flagCode: randomFlag.code,
                 portOfRegistry: randomFlag.name === 'España' ? 'Camariñas' : 'Registro Extranjero',
-                skipperId: `${Math.floor(10000000 + Math.random() * 90000000)}X`,
+                skipperId: `${(10000000 + globalId)}X`,
                 nationality: randomFlag.name,
-                isBase: Math.random() > 0.6,
+                isBase: isBase,
+                isMember: isMember,
+                isMultihull: isMultihull,
                 inDryDock: false,
-                // Si es base, le asignamos esta plaza como titular
-                titularMooringId: (Math.random() > 0.6) ? fullId : undefined
+                titularMooringId: isBase ? fullId : undefined
             };
-            if (boat.isBase) boat.titularMooringId = fullId;
         } else if (status === MooringStatus.RESERVED) {
             reservation = {
                 startDate: '2024-06-01',
                 endDate: '2024-06-15',
-                notes: 'Reserva Tránsito Booking',
-                relatedBoatName: 'Visitante Futuro',
+                notes: `Reserva Tránsito #${globalId}`,
+                relatedBoatName: `Visitante Futuro ${globalId}`,
                 type: 'TRANSIT_RESERVATION'
             };
         }

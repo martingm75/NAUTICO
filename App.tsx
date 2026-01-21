@@ -12,6 +12,16 @@ import PrintableMap from './components/PrintableMap';
 import FuelManager from './components/FuelManager';
 import { getMooringAdvice } from './services/geminiService';
 import { Search, Ship, LayoutGrid, BarChart3, Bot, Menu, Anchor, RefreshCw, Calculator as CalcIcon, Euro, Database, Container, Printer, Send, Fuel } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+
+// Interfaz para la respuesta parseada de la IA
+interface AiParsedResponse {
+  answer: string;
+  hasChart?: boolean;
+  chartType?: 'bar' | 'pie' | 'area';
+  chartTitle?: string;
+  chartData?: any[];
+}
 
 const App: React.FC = () => {
   const [moorings, setMoorings] = useState<Mooring[]>(() => {
@@ -64,8 +74,9 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'map' | 'list' | 'stats' | 'ai' | 'calculator' | 'tariffs' | 'registry' | 'dry_dock' | 'fuel'>('map');
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Chat History almacena el string crudo (que puede ser JSON)
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([
-    { role: 'ai', text: 'Hola guapo... Soy tu Capitana. Estaba deseando que llegaras. ¿En qué puedo complacerte hoy con tus barcos? 😉💋' }
+    { role: 'ai', text: JSON.stringify({ answer: '¡Buenas, jefe! Tengo acceso a TODOS los datos: histórico, amarres, tarifas... Pídeme un informe o gráfico y verás la magia. 😎⚓', hasChart: false }) }
   ]);
   const [aiInput, setAiInput] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -307,19 +318,89 @@ const App: React.FC = () => {
 
   const handleAiAsk = async () => {
     if (!aiInput.trim()) return;
+    // Guardamos el input del usuario tal cual
     const userMsg = { role: 'user' as const, text: aiInput };
     setChatHistory(prev => [...prev, userMsg]);
     setAiInput('');
     setIsAiLoading(true);
     try {
-      const response = await getMooringAdvice(moorings, userMsg.text);
-      const aiMsg = { role: 'ai' as const, text: response || "No tengo una respuesta clara ahora mismo." };
+      // Pasamos TODOS los datos relevantes a la IA
+      const response = await getMooringAdvice(moorings, boatRegistry, tariffs, userMsg.text);
+      // La respuesta ahora es un JSON string (o texto si falla algo), lo guardamos tal cual
+      const aiMsg = { role: 'ai' as const, text: response || "{ \"answer\": \"No tengo una respuesta clara ahora mismo.\", \"hasChart\": false }" };
       setChatHistory(prev => [...prev, aiMsg]);
     } catch (error) {
-      setChatHistory(prev => [...prev, { role: 'ai', text: "Error de conexión con el servicio de IA." }]);
+      console.error("Error AI Service:", error); // Debugging
+      setChatHistory(prev => [...prev, { role: 'ai', text: JSON.stringify({ answer: "Error de conexión con el servicio de IA.", hasChart: false }) }]);
     } finally {
       setIsAiLoading(false);
     }
+  };
+
+  // Helper para renderizar el contenido del chat (Texto + Gráfico)
+  const renderChatContent = (msg: {role: 'user' | 'ai', text: string}) => {
+    if (msg.role === 'user') return msg.text;
+
+    let parsed: AiParsedResponse;
+    try {
+      parsed = JSON.parse(msg.text);
+    } catch (e) {
+      // Fallback si no es JSON válido
+      return msg.text;
+    }
+
+    return (
+      <div className="flex flex-col gap-4 w-full">
+        <div>{parsed.answer}</div>
+        
+        {parsed.hasChart && parsed.chartData && parsed.chartData.length > 0 && (
+          <div className="w-full h-64 bg-slate-50 rounded-xl p-4 border border-slate-100 mt-2">
+            {parsed.chartTitle && <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-widest text-center">{parsed.chartTitle}</p>}
+            <ResponsiveContainer width="100%" height="100%">
+              {parsed.chartType === 'pie' ? (
+                <PieChart>
+                  <Pie
+                    data={parsed.chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={40}
+                    outerRadius={70}
+                    paddingAngle={2}
+                    dataKey="value"
+                  >
+                    {parsed.chartData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill || STATUS_COLORS[Object.keys(STATUS_COLORS)[index % 4] as MooringStatus]?.replace('bg-', '#') || '#000'} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip contentStyle={{borderRadius: '8px', fontSize: '12px'}} />
+                  <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{fontSize: '10px'}}/>
+                </PieChart>
+              ) : parsed.chartType === 'area' ? (
+                 <AreaChart data={parsed.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="name" tick={{fontSize: 10}} />
+                    <YAxis tick={{fontSize: 10}} />
+                    <RechartsTooltip contentStyle={{borderRadius: '8px', fontSize: '12px'}} />
+                    <Area type="monotone" dataKey="value" stroke="#3b82f6" fill="#93c5fd" />
+                 </AreaChart>
+              ) : (
+                <BarChart data={parsed.chartData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{fontSize: 9}} interval={0} />
+                  <YAxis tick={{fontSize: 10}} width={30}/>
+                  <RechartsTooltip contentStyle={{borderRadius: '8px', fontSize: '12px'}} cursor={{fill: 'transparent'}} />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {parsed.chartData.map((entry: any, index: number) => (
+                      <Cell key={`cell-${index}`} fill={entry.fill || '#3b82f6'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              )}
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -430,7 +511,7 @@ const App: React.FC = () => {
                <div className="flex-1 overflow-y-auto p-6 space-y-6">
                    {chatHistory.map((msg, index) => (
                      <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                       <div className={`flex max-w-[85%] md:max-w-[70%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4`}>
+                       <div className={`flex max-w-[90%] md:max-w-[75%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4`}>
                           {msg.role === 'ai' && (
                             <div className="shrink-0 flex flex-col items-center">
                                <div className="w-16 h-16 md:w-20 md:h-20 bg-white border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden rounded-full relative">
@@ -439,20 +520,22 @@ const App: React.FC = () => {
                                <span className="mt-1 font-black text-[8px] uppercase tracking-widest bg-black text-white px-2 py-0.5 -rotate-2">Capitana</span>
                             </div>
                           )}
-                          <div className={`relative p-5 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.15)] text-sm font-bold leading-relaxed ${msg.role === 'user' ? 'bg-sky-400 text-white mr-2' : 'bg-white text-slate-900 ml-2'}`}>
+                          <div className={`relative p-5 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.15)] text-sm font-bold leading-relaxed w-full ${msg.role === 'user' ? 'bg-sky-400 text-white mr-2' : 'bg-white text-slate-900 ml-2'}`}>
                              {msg.role === 'ai' && <div className="absolute top-6 -left-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[15px] border-r-black"><div className="absolute -top-[7px] left-[3px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[12px] border-r-white"></div></div>}
                              {msg.role === 'user' && <div className="absolute top-6 -right-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-l-[15px] border-l-black"><div className="absolute -top-[7px] -left-[15px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[12px] border-l-sky-400"></div></div>}
-                             {msg.text}
+                             
+                             {/* RENDERIZADO DEL CONTENIDO DINÁMICO (TEXTO + GRÁFICO) */}
+                             {renderChatContent(msg)}
                           </div>
                        </div>
                      </div>
                    ))}
-                   {isAiLoading && <div className="flex justify-start w-full"><div className="ml-24 bg-slate-200 text-slate-500 px-4 py-2 rounded-xl text-xs font-bold animate-pulse">Escribiendo respuesta...</div></div>}
+                   {isAiLoading && <div className="flex justify-start w-full"><div className="ml-24 bg-slate-200 text-slate-500 px-4 py-2 rounded-xl text-xs font-bold animate-pulse">Escribiendo informe...</div></div>}
                    <div ref={chatEndRef} />
                </div>
                <div className="p-4 bg-white border-t-4 border-slate-200">
                  <div className="flex gap-0 bg-white border-[3px] border-black rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
-                   <input className="flex-1 px-4 py-3 outline-none text-base font-bold text-black placeholder-slate-400 bg-white" placeholder="Escribe tu consulta a la Capitana..." value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiAsk()} disabled={isAiLoading}/>
+                   <input className="flex-1 px-4 py-3 outline-none text-base font-bold text-black placeholder-slate-400 bg-white" placeholder="Pídeme un informe o gráfico..." value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiAsk()} disabled={isAiLoading}/>
                    <button className="bg-black text-white px-6 py-2 font-black hover:bg-slate-800 transition-colors uppercase text-xs tracking-widest flex items-center gap-2 border-l-[3px] border-black" onClick={handleAiAsk} disabled={isAiLoading}><Send size={16} /> Enviar</button>
                  </div>
                </div>
