@@ -508,20 +508,22 @@ const App: React.FC = () => {
              activeTab === 'calculator' ? <div className="p-6 flex items-center justify-center h-full bg-slate-50"><Calculator /></div> :
              activeTab === 'tariffs' ? <div className="h-full"><TariffManager tariffs={tariffs} onUpdate={setTariffs} /></div> :
              <div className="flex flex-col h-full w-full bg-slate-50">
-               <div className="flex-1 overflow-y-auto p-6 space-y-6">
+               <div className="flex-1 overflow-y-auto p-6 space-y-8">
                    {chatHistory.map((msg, index) => (
                      <div key={index} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                       <div className={`flex max-w-[90%] md:max-w-[75%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4`}>
+                       <div className={`flex max-w-[95%] md:max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'} items-start gap-4`}>
                           {msg.role === 'ai' && (
                             <div className="shrink-0 flex flex-col items-center">
-                               <div className="w-16 h-16 md:w-20 md:h-20 bg-white border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden rounded-full relative">
-                                  <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?fit=crop&w=300&h=300" alt="Capitana" className="w-full h-full object-cover" />
+                               {/* RETRATO CUERPO ENTERO / VERTICAL */}
+                               <div className="w-24 h-48 md:w-32 md:h-64 bg-white border-[3px] border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden rounded-2xl relative transition-transform hover:scale-105 duration-300">
+                                  <img src="https://images.unsplash.com/photo-1544005313-94ddf0286df2?fit=crop&w=600&h=1200&q=80" alt="Capitana" className="w-full h-full object-cover object-center" />
                                </div>
-                               <span className="mt-1 font-black text-[8px] uppercase tracking-widest bg-black text-white px-2 py-0.5 -rotate-2">Capitana</span>
+                               <span className="mt-[-12px] font-black text-[9px] uppercase tracking-widest bg-black text-white px-3 py-1 -rotate-2 z-10 border-2 border-white shadow-lg">Capitana</span>
                             </div>
                           )}
-                          <div className={`relative p-5 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.15)] text-sm font-bold leading-relaxed w-full ${msg.role === 'user' ? 'bg-sky-400 text-white mr-2' : 'bg-white text-slate-900 ml-2'}`}>
-                             {msg.role === 'ai' && <div className="absolute top-6 -left-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[15px] border-r-black"><div className="absolute -top-[7px] left-[3px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[12px] border-r-white"></div></div>}
+                          
+                          <div className={`relative p-5 rounded-2xl border-[3px] border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,0.15)] text-sm font-bold leading-relaxed w-full mt-8 ${msg.role === 'user' ? 'bg-sky-400 text-white mr-2' : 'bg-white text-slate-900 ml-2'}`}>
+                             {msg.role === 'ai' && <div className="absolute top-8 -left-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-r-[15px] border-r-black"><div className="absolute -top-[7px] left-[3px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-r-[12px] border-r-white"></div></div>}
                              {msg.role === 'user' && <div className="absolute top-6 -right-[18px] w-0 h-0 border-t-[10px] border-t-transparent border-b-[10px] border-b-transparent border-l-[15px] border-l-black"><div className="absolute -top-[7px] -left-[15px] w-0 h-0 border-t-[7px] border-t-transparent border-b-[7px] border-b-transparent border-l-[12px] border-l-sky-400"></div></div>}
                              
                              {/* RENDERIZADO DEL CONTENIDO DINÁMICO (TEXTO + GRÁFICO) */}
